@@ -234,6 +234,42 @@ describe('DiscordClient', () => {
         ],
       });
     });
+
+    it('fetches recent channel messages before the current message for context', async () => {
+      const client = new DiscordClient('test-token', undefined, ['allowed-user']);
+      const mockChannel = {
+        isTextBased: () => true,
+        messages: {
+          fetch: vi.fn().mockResolvedValue(new Map([
+            ['m3', {
+              author: { username: 'codex-in-company', bot: true },
+              content: '이전 답변',
+              attachments: new Map([['a1', { name: 'result.png', filename: 'result.png' }]]),
+            }],
+            ['m2', {
+              author: { username: 'atoto0311', bot: false },
+              content: '이전 질문',
+              attachments: new Map(),
+            }],
+            ['m1', {
+              author: { username: 'codex-in-company', bot: true },
+              content: '**Codex** - 📨 받은 메시지: `noise`',
+              attachments: new Map(),
+            }],
+          ])),
+        },
+      };
+      const mockClient = getMockClient();
+      mockClient.channels.fetch.mockResolvedValue(mockChannel);
+
+      const messages = await client.getRecentMessages('ch-1', 'm4', 3);
+
+      expect(mockChannel.messages.fetch).toHaveBeenCalledWith({ limit: 3, before: 'm4' });
+      expect(messages).toEqual([
+        { authorName: 'atoto0311', authorBot: false, content: '이전 질문', attachments: [] },
+        { authorName: 'codex-in-company', authorBot: true, content: '이전 답변', attachments: ['result.png'] },
+      ]);
+    });
   });
 
   describe('Approval allowlist', () => {

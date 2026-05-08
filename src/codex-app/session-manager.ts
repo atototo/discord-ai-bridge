@@ -1,7 +1,7 @@
 import { splitForDiscord } from '../capture/parser.js';
 import { formatDiscordFinalAnswer } from '../discord/format.js';
 import { extractDiscordAttachments } from '../attachments/index.js';
-import type { DiscordAttachment } from '../types/index.js';
+import type { DiscordAttachment, DiscordRecentMessage } from '../types/index.js';
 
 export interface CodexAppServerClientLike {
   start(): Promise<void>;
@@ -18,6 +18,7 @@ export interface CodexAppServerSendMessageParams {
   channelId: string;
   content: string;
   attachments: DiscordAttachment[];
+  recentMessages?: DiscordRecentMessage[];
   discord: {
     sendToChannel(channelId: string, content: string): Promise<void>;
     sendFilesToChannel?(
@@ -74,6 +75,7 @@ export class CodexAppServerSessionManager {
 
   async sendMessage(params: CodexAppServerSendMessageParams): Promise<void> {
     await this.ensureStarted();
+    const existingThread = this.threads.get(params.projectName);
     const thread = await this.ensureThread(params);
     thread.channelId = params.channelId;
     thread.discord = params.discord;
@@ -81,7 +83,11 @@ export class CodexAppServerSessionManager {
     await this.client.request('turn/start', {
       threadId: thread.threadId,
       cwd: params.projectPath,
-      input: this.buildUserInput(params.content, params.attachments),
+      input: this.buildUserInput(
+        params.content,
+        params.attachments,
+        existingThread ? [] : params.recentMessages || []
+      ),
     });
   }
 
@@ -123,8 +129,13 @@ export class CodexAppServerSessionManager {
     return thread;
   }
 
-  private buildUserInput(content: string, attachments: DiscordAttachment[]): any[] {
-    const input: any[] = [{ type: 'text', text: `${content}${DISCORD_OUTPUT_INSTRUCTIONS}`, text_elements: [] }];
+  private buildUserInput(
+    content: string,
+    attachments: DiscordAttachment[],
+    recentMessages: DiscordRecentMessage[] = []
+  ): any[] {
+    const context = this.buildRecentContext(recentMessages);
+    const input: any[] = [{ type: 'text', text: `${context}${content}${DISCORD_OUTPUT_INSTRUCTIONS}`, text_elements: [] }];
     for (const attachment of attachments) {
       if (!attachment.localPath) continue;
       if ((attachment.contentType || '').startsWith('image/')) {
@@ -134,6 +145,29 @@ export class CodexAppServerSessionManager {
       }
     }
     return input;
+  }
+
+  private buildRecentContext(messages: DiscordRecentMessage[]): string {
+    const useful = messages
+      .filter((message) => message.content.trim() || message.attachments.length > 0)
+      .slice(-20);
+    if (useful.length === 0) return '';
+
+    const lines = useful.map((message) => {
+      const speaker = message.authorBot ? `bot:${message.authorName}` : `user:${message.authorName}`;
+      const attachmentText = message.attachments.length > 0
+        ? ` (첨부: ${message.attachments.join(', ')})`
+        : '';
+      return `- ${speaker}: ${message.content}${attachmentText}`.trim();
+    });
+
+    return [
+      '[Discord 최근 대화 맥락]',
+      ...lines,
+      '',
+      '위 맥락은 daemon 재시작 후 이어받기용 참고 정보입니다. 현재 사용자 요청은 아래 메시지입니다.',
+      '',
+    ].join('\n');
   }
 
   private async handleNotification(message: any): Promise<void> {

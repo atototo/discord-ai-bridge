@@ -45,6 +45,7 @@ function createMockDiscord() {
     sendQuestionWithButtons: vi.fn(),
     setTargetChannel: vi.fn(),
     sendMessage: vi.fn(),
+    getRecentMessages: vi.fn().mockResolvedValue([]),
   } as any;
 }
 
@@ -283,6 +284,61 @@ describe('AgentBridge', () => {
         discord: mockDiscord,
       }));
       expect(mockTmux.sendKeysToWindow).not.toHaveBeenCalled();
+    });
+
+    it('passes recent Discord channel context to new Codex app-server threads', async () => {
+      const mockTmux = createMockTmux();
+      const appServer = {
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+        stop: vi.fn(),
+      };
+      const codexAdapter = {
+        config: { name: 'codex', displayName: 'Codex', command: 'codex', channelSuffix: 'codex' },
+        getStartCommand: vi.fn().mockReturnValue('cd "/test" && codex'),
+        matchesChannel: vi.fn(),
+        isInstalled: vi.fn().mockReturnValue(true),
+      };
+      const registry = {
+        get: vi.fn().mockReturnValue(codexAdapter),
+        getAll: vi.fn().mockReturnValue([codexAdapter]),
+        register: vi.fn(),
+        getByChannelSuffix: vi.fn(),
+        parseChannelName: vi.fn(),
+      } as any;
+      const project: ProjectState = {
+        projectName: 'repo',
+        projectPath: '/repo',
+        tmuxSession: 'agent-repo',
+        discordChannels: { codex: 'channel-1' },
+        agents: { codex: true },
+        createdAt: new Date(),
+        lastActive: new Date(),
+      };
+      mockDiscord.getRecentMessages.mockResolvedValue([
+        { authorName: 'atoto0311', authorBot: false, content: '이전 질문', attachments: [] },
+        { authorName: 'codex-in-company', authorBot: true, content: '이전 답변', attachments: ['result.png'] },
+      ]);
+      mockStateManager.getProject.mockReturnValue(project);
+      bridge = new AgentBridge({
+        discord: mockDiscord,
+        tmux: mockTmux,
+        stateManager: mockStateManager,
+        registry,
+        config: { ...createMockConfig(), codexTransport: 'app-server', discordContextMessages: 2 },
+        codexAppServer: appServer as any,
+      });
+
+      await bridge.start();
+      const callback = mockDiscord.onMessage.mock.calls[0][0];
+      await callback('codex', '계속해줘', 'repo', 'channel-1', { messageId: 'm2', attachments: [] });
+
+      expect(mockDiscord.getRecentMessages).toHaveBeenCalledWith('channel-1', 'm2', 2);
+      expect(appServer.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+        recentMessages: [
+          { authorName: 'atoto0311', authorBot: false, content: '이전 질문', attachments: [] },
+          { authorName: 'codex-in-company', authorBot: true, content: '이전 답변', attachments: ['result.png'] },
+        ],
+      }));
     });
   });
 

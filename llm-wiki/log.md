@@ -204,3 +204,11 @@
 - README/README.ko를 커스텀 fork 상태, app-server 기본 흐름, 파일/이미지 업로드, 승인 UX, npm link 사용법에 맞게 갱신했다.
 - secret scanner 오탐을 줄이기 위해 문서의 실제 토큰처럼 보이는 예시를 `YOUR_DISCORD_BOT_TOKEN` placeholder로 바꿨다.
 - 검증: bundled Node 실행 기준 `tsc --noEmit`, `vitest run`(17 files, 171 tests), `tsup build` 통과.
+
+## [2026-05-08] feature | 새 Codex thread에 Discord 최근 대화 맥락 주입
+
+- daemon 재시작 후 Codex app-server thread가 새로 만들어지면 이전 Codex 대화 맥락을 잃는 문제가 있었다.
+- app-server 첫 turn에 한해 같은 Discord 채널의 최근 메시지를 가져와 `[Discord 최근 대화 맥락]` 섹션으로 입력 앞에 붙인다.
+- Discord history fetch는 현재 메시지 이전 메시지만 대상으로 하고, bridge의 수신 확인/진행 상태 같은 noise 메시지는 제외한다.
+- 기본 최근 메시지 수는 12개이며 `DISCORD_CONTEXT_MESSAGES=0`으로 비활성화할 수 있다.
+- 검증: bundled Node 실행 기준 `tsc --noEmit`, `vitest run`(17 files, 174 tests), `tsup build` 통과.

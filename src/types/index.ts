@@ -40,6 +40,13 @@ export interface DiscordMessageMeta {
   attachments: DiscordAttachment[];
 }
 
+export interface DiscordRecentMessage {
+  authorName: string;
+  authorBot: boolean;
+  content: string;
+  attachments: string[];
+}
+
 export interface BridgeConfig {
   discord: DiscordConfig;
   tmux: {
@@ -47,6 +54,7 @@ export interface BridgeConfig {
   };
   hookServerPort?: number;
   capturePollIntervalMs?: number;
+  discordContextMessages?: number;
   codexTransport?: 'tmux' | 'app-server';
 }
 

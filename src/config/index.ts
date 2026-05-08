@@ -57,6 +57,9 @@ export class ConfigManager {
           (this.env.get('HOOK_SERVER_PORT') ? parseInt(this.env.get('HOOK_SERVER_PORT')!, 10) : 18470),
         capturePollIntervalMs: storedConfig.capturePollIntervalMs ||
           (this.env.get('CAPTURE_POLL_INTERVAL_MS') ? parseInt(this.env.get('CAPTURE_POLL_INTERVAL_MS')!, 10) : 3000),
+        discordContextMessages: this.env.get('DISCORD_CONTEXT_MESSAGES')
+          ? parseInt(this.env.get('DISCORD_CONTEXT_MESSAGES')!, 10)
+          : 12,
         codexTransport: this.env.get('CODEX_TRANSPORT') === 'app-server' ? 'app-server' : 'tmux',
       };
     }

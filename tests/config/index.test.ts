@@ -111,6 +111,7 @@ describe('ConfigManager', () => {
       env.set('DISCORD_ALLOWED_USER_IDS', 'user-1, user-2,,user-3');
       env.set('HOOK_SERVER_PORT', '7777');
       env.set('CAPTURE_POLL_INTERVAL_MS', '2500');
+      env.set('DISCORD_CONTEXT_MESSAGES', '8');
 
       const manager = new ConfigManager(storage, env, configDir);
       const config = manager.config;
@@ -120,6 +121,7 @@ describe('ConfigManager', () => {
       expect(config.discord.allowedUserIds).toEqual(['user-1', 'user-2', 'user-3']);
       expect(config.hookServerPort).toBe(7777);
       expect(config.capturePollIntervalMs).toBe(2500);
+      expect(config.discordContextMessages).toBe(8);
     });
 
     it('stored config takes priority over env vars', () => {

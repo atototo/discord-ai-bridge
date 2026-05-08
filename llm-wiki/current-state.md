@@ -40,6 +40,7 @@
 - app-server transport에서 Discord 이미지 첨부는 `localImage` user input으로 전달된다.
 - app-server transport에서 일반 파일 첨부는 로컬 파일 경로를 text input에 포함해 전달한다.
 - app-server transport는 Discord에서 온 모든 사용자 입력에 outbound 파일 전송 지침을 덧붙인다. 이미지/파일을 보여줘야 하면 로컬 경로 링크나 Markdown image가 아니라 `[[discord-attach:/absolute/path]]` 마커를 별도 줄로 포함하도록 Codex에 안내한다.
+- daemon 재시작 후 새 Codex app-server thread가 만들어질 때는 같은 Discord 채널의 최근 메시지를 첫 turn에 `[Discord 최근 대화 맥락]`으로 붙인다. 기본 12개이며 `DISCORD_CONTEXT_MESSAGES=0`으로 비활성화할 수 있다.
 - app-server transport는 `item/started` notification을 Discord 상태 메시지로 변환해 웹 검색/명령 실행/도구 사용 시작을 먼저 보여준다.
 - app-server transport의 assistant 답변 본문은 중간 delta를 조각내 보내지 않고, `item/completed`의 `agentMessage.text`와 `turn/completed`를 기준으로 한 번에 전송한다.
 - Discord 최종 답변은 코드블럭으로 감싸지 않고 일반 Markdown 메시지로 보내 bold/list/link가 Discord에서 렌더링되도록 한다.

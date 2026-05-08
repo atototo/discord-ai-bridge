@@ -13,7 +13,7 @@ import {
   ComponentType,
   EmbedBuilder,
 } from 'discord.js';
-import type { AgentMessage } from '../types/index.js';
+import type { AgentMessage, DiscordRecentMessage } from '../types/index.js';
 import type { DiscordAttachment, DiscordMessageMeta } from '../types/index.js';
 import { agentRegistry as defaultAgentRegistry, type AgentConfig, type AgentRegistry } from '../agents/index.js';
 
@@ -98,6 +98,46 @@ export class DiscordClient {
       contentType: attachment.contentType,
       size: attachment.size,
     }));
+  }
+
+  async getRecentMessages(
+    channelId: string,
+    beforeMessageId: string,
+    limit: number
+  ): Promise<DiscordRecentMessage[]> {
+    if (limit <= 0) return [];
+    const channel = await this.client.channels.fetch(channelId);
+    if (!channel?.isTextBased()) return [];
+
+    const messages = await (channel as TextChannel).messages.fetch({
+      limit,
+      before: beforeMessageId,
+    });
+
+    return [...messages.values()]
+      .reverse()
+      .map((message: any) => ({
+        authorName: message.author?.username || message.author?.displayName || 'unknown',
+        authorBot: !!message.author?.bot,
+        content: this.truncateContextContent(message.content || ''),
+        attachments: this.extractAttachments(message.attachments).map((attachment) => attachment.name),
+      }))
+      .filter((message) => this.isUsefulContextMessage(message));
+  }
+
+  private isUsefulContextMessage(message: DiscordRecentMessage): boolean {
+    if (!message.content.trim() && message.attachments.length === 0) return false;
+    const content = message.content.trim();
+    if (content.includes('📨 받은 메시지:')) return false;
+    if (content.startsWith('🔧 명령 실행 중:')) return false;
+    if (content.startsWith('🖼️ 이미지 확인 중:')) return false;
+    if (content.startsWith('🎨 이미지 생성 중')) return false;
+    if (content.startsWith('🔍 웹 검색 중:')) return false;
+    return true;
+  }
+
+  private truncateContextContent(content: string, maxLength: number = 700): string {
+    return content.length > maxLength ? content.slice(0, maxLength - 1) + '…' : content;
   }
 
   private isUserAllowed(userId: string): boolean {

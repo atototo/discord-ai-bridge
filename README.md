@@ -132,6 +132,8 @@ CODEX_TRANSPORT=app-server agent-discord go codex
 
 In this mode Codex is started by the bridge as `codex app-server --listen stdio://`. Discord messages become Codex `turn/start` requests, assistant answers are posted back to Discord when the turn completes, and command/file-change/permission approval requests are routed to Discord reactions. There is no tmux Codex UI to attach to in this mode.
 
+When a daemon restart creates a fresh Codex app-server thread, the bridge fetches recent messages from the same Discord channel and prepends them as lightweight context to the first turn. This preserves enough conversational continuity without trying to persist Codex's internal thread state. Set `DISCORD_CONTEXT_MESSAGES=0` to disable it or another number to tune how many prior messages are included.
+
 If the daemon is already running with a different transport, restart it with the same environment first:
 
 ```bash
@@ -438,6 +440,7 @@ Config values can be overridden with environment variables:
 | `HOOK_SERVER_PORT` | No | Port for the hook server | `18470` |
 | `CAPTURE_POLL_INTERVAL_MS` | No | tmux capture polling interval | `3000` |
 | `CODEX_TRANSPORT` | No | Codex transport: `tmux` or `app-server` | `tmux` |
+| `DISCORD_CONTEXT_MESSAGES` | No | Recent channel messages to include when a new Codex app-server thread starts | `12` |
 
 ```bash
 DISCORD_BOT_TOKEN=token agent-discord daemon start

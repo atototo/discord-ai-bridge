@@ -95,6 +95,42 @@ describe('CodexAppServerSessionManager', () => {
     expect(turn?.params.input[0].text).toContain('Discord에 이미지나 파일을 보여줘야 하면');
   });
 
+  it('includes recent Discord channel context only when starting a new app-server thread', async () => {
+    const client = new FakeClient();
+    const manager = new CodexAppServerSessionManager(client);
+
+    await manager.sendMessage({
+      projectName: 'repo',
+      projectPath: '/repo',
+      channelId: 'channel-1',
+      content: '계속해줘',
+      attachments: [],
+      recentMessages: [
+        { authorName: 'atoto0311', authorBot: false, content: '이전 질문', attachments: [] },
+        { authorName: 'codex-in-company', authorBot: true, content: '이전 답변', attachments: ['result.png'] },
+      ],
+      discord: createDiscord(),
+    });
+
+    await manager.sendMessage({
+      projectName: 'repo',
+      projectPath: '/repo',
+      channelId: 'channel-1',
+      content: '다음',
+      attachments: [],
+      recentMessages: [
+        { authorName: 'atoto0311', authorBot: false, content: '다시 넣으면 안 됨', attachments: [] },
+      ],
+      discord: createDiscord(),
+    });
+
+    const turns = client.requests.filter((request) => request.method === 'turn/start');
+    expect(turns[0].params.input[0].text).toContain('[Discord 최근 대화 맥락]');
+    expect(turns[0].params.input[0].text).toContain('이전 질문');
+    expect(turns[0].params.input[0].text).toContain('첨부: result.png');
+    expect(turns[1].params.input[0].text).not.toContain('[Discord 최근 대화 맥락]');
+  });
+
   it('streams agent deltas to Discord only when the turn completes', async () => {
     const client = new FakeClient();
     const discord = createDiscord();

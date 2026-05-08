@@ -144,12 +144,14 @@ export class AgentBridge {
           await this.discord.sendToChannel(channelId, '⚠️ Codex app-server transport is not initialized');
           return;
         }
+        const recentMessages = await this.loadRecentDiscordContext(channelId, meta.messageId);
         await this.codexAppServer.sendMessage({
           projectName,
           projectPath: project.projectPath,
           channelId,
           content,
           attachments: downloadedAttachments,
+          recentMessages,
           discord: this.discord,
         });
       } else {
@@ -168,6 +170,17 @@ export class AgentBridge {
     console.log('✅ Discord Agent Bridge is running');
     console.log(`📡 Server listening on port ${this.bridgeConfig.hookServerPort || 18470}`);
     console.log(`🤖 Registered agents: ${this.registry.getAll().map(a => a.config.displayName).join(', ')}`);
+  }
+
+  private async loadRecentDiscordContext(channelId: string, beforeMessageId: string) {
+    const limit = this.bridgeConfig.discordContextMessages ?? 12;
+    if (limit <= 0) return [];
+    try {
+      return await this.discord.getRecentMessages(channelId, beforeMessageId, limit);
+    } catch (error) {
+      console.warn('Failed to load Discord context:', error);
+      return [];
+    }
   }
 
   private startServer(): void {

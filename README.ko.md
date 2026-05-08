@@ -118,6 +118,8 @@ CODEX_TRANSPORT=app-server agent-discord go codex --no-attach
 
 이 모드에서는 bridge가 `codex app-server --listen stdio://`를 로컬 프로세스로 실행합니다. Discord 메시지는 Codex `turn/start` 요청으로 들어가고, assistant 답변은 turn 완료 시 Discord로 전송되며, 명령/파일/권한 승인 요청은 Discord 승인 reaction으로 라우팅됩니다. 이 모드에는 attach할 Codex tmux UI가 없습니다.
 
+daemon 재시작으로 Codex app-server thread가 새로 만들어질 때는 같은 Discord 채널의 최근 메시지 몇 개를 가져와 첫 turn 앞에 가벼운 맥락으로 붙입니다. Codex 내부 thread를 억지로 복원하지는 않지만, 채널의 직전 대화 흐름을 참고할 수 있습니다. `DISCORD_CONTEXT_MESSAGES=0`이면 끌 수 있고, 숫자를 바꾸면 포함할 최근 메시지 수를 조정할 수 있습니다.
+
 ### 파일과 이미지
 
 Discord 첨부 파일은 프로젝트 내부 `.agent-discord/attachments/<message-id>/`에 다운로드됩니다.
@@ -372,6 +374,7 @@ DISCORD_GUILD_ID=server_id agent-discord go
 HOOK_SERVER_PORT=18470 agent-discord go
 CAPTURE_POLL_INTERVAL_MS=3000 agent-discord go
 CODEX_TRANSPORT=app-server agent-discord go codex
+DISCORD_CONTEXT_MESSAGES=12 agent-discord-codex
 ```
 
 ## 개발
