@@ -299,9 +299,6 @@ export class AgentBridge {
       throw new Error('Server ID not configured. Run: agent-discord config --server <id>');
     }
 
-    // Create tmux session
-    const tmuxSession = this.tmux.getOrCreateSession(projectName);
-
     // Collect enabled agents (should be only one)
     const enabledAgents = this.registry.getAll().filter(a => agents[a.config.name]);
     const adapter = enabledAgents[0];
@@ -309,6 +306,11 @@ export class AgentBridge {
     if (!adapter) {
       throw new Error('No agent specified');
     }
+
+    const usesCodexAppServer = adapter.config.name === 'codex' && this.bridgeConfig.codexTransport === 'app-server';
+    const tmuxSession = usesCodexAppServer
+      ? `app-server:${projectName}`
+      : this.tmux.getOrCreateSession(projectName);
 
     // Create Discord channel with custom name or default
     const channelName = channelDisplayName || `${projectName}-${adapter.config.channelSuffix}`;
@@ -321,15 +323,17 @@ export class AgentBridge {
 
     const channelId = channels[adapter.config.name];
 
-    // Set environment variables on the tmux session
     const port = overridePort || this.bridgeConfig.hookServerPort || 18470;
-    this.tmux.setSessionEnv(tmuxSession, 'AGENT_DISCORD_PROJECT', projectName);
-    this.tmux.setSessionEnv(tmuxSession, 'AGENT_DISCORD_PORT', String(port));
-    if (yolo) {
-      this.tmux.setSessionEnv(tmuxSession, 'AGENT_DISCORD_YOLO', '1');
-    }
-    if (sandbox) {
-      this.tmux.setSessionEnv(tmuxSession, 'AGENT_DISCORD_SANDBOX', '1');
+    if (!usesCodexAppServer) {
+      // Set environment variables on the tmux session
+      this.tmux.setSessionEnv(tmuxSession, 'AGENT_DISCORD_PROJECT', projectName);
+      this.tmux.setSessionEnv(tmuxSession, 'AGENT_DISCORD_PORT', String(port));
+      if (yolo) {
+        this.tmux.setSessionEnv(tmuxSession, 'AGENT_DISCORD_YOLO', '1');
+      }
+      if (sandbox) {
+        this.tmux.setSessionEnv(tmuxSession, 'AGENT_DISCORD_SANDBOX', '1');
+      }
     }
 
     // Start agent in tmux window
@@ -337,7 +341,7 @@ export class AgentBridge {
       [adapter.config.name]: channelId,
     };
 
-    if (!(adapter.config.name === 'codex' && this.bridgeConfig.codexTransport === 'app-server')) {
+    if (!usesCodexAppServer) {
       this.tmux.startAgentInWindow(
         tmuxSession,
         adapter.config.name,

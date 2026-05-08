@@ -344,10 +344,10 @@ program
         }
       }
 
-      const tmux = new TmuxManager('agent-');
       const yolo = !!options.yolo;
       const sandbox = !!options.sandbox;
       const usesCodexAppServer = agentName === 'codex' && config.codexTransport === 'app-server';
+      const tmux = usesCodexAppServer ? null : new TmuxManager('agent-');
 
       if (sandbox) {
         console.log(chalk.cyan('   🐳 Sandbox mode: --sandbox (Docker container)'));
@@ -387,19 +387,19 @@ program
         } catch { /* daemon will pick up on next restart */ }
       } else {
         // Existing project: ensure tmux session and selected agent window exist
-        const tmuxSession = tmux.getOrCreateSession(projectName);
         const adapter = agentRegistry.get(agentName)!;
-        // Set env vars on existing session too
-        tmux.setSessionEnv(tmuxSession, 'AGENT_DISCORD_PROJECT', projectName);
-        tmux.setSessionEnv(tmuxSession, 'AGENT_DISCORD_PORT', String(port));
-        if (yolo) {
-          tmux.setSessionEnv(tmuxSession, 'AGENT_DISCORD_YOLO', '1');
-        }
-        if (sandbox) {
-          tmux.setSessionEnv(tmuxSession, 'AGENT_DISCORD_SANDBOX', '1');
-        }
         if (!usesCodexAppServer) {
-          tmux.ensureAgentInWindow(
+          const tmuxSession = tmux!.getOrCreateSession(projectName);
+          // Set env vars on existing session too
+          tmux!.setSessionEnv(tmuxSession, 'AGENT_DISCORD_PROJECT', projectName);
+          tmux!.setSessionEnv(tmuxSession, 'AGENT_DISCORD_PORT', String(port));
+          if (yolo) {
+            tmux!.setSessionEnv(tmuxSession, 'AGENT_DISCORD_YOLO', '1');
+          }
+          if (sandbox) {
+            tmux!.setSessionEnv(tmuxSession, 'AGENT_DISCORD_SANDBOX', '1');
+          }
+          tmux!.ensureAgentInWindow(
             tmuxSession,
             adapter.config.name,
             adapter.getStartCommand(projectPath, yolo, sandbox)

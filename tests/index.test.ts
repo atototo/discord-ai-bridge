@@ -636,7 +636,7 @@ describe('AgentBridge', () => {
       ).rejects.toThrow('No agent specified');
     });
 
-    it('does not start a tmux Codex window when app-server transport is configured', async () => {
+    it('does not touch tmux when setting up Codex app-server projects', async () => {
       const codexAdapter = {
         config: { name: 'codex', displayName: 'Codex', command: 'codex', channelSuffix: 'codex' },
         getStartCommand: vi.fn().mockReturnValue('cd "/test/path" && codex'),
@@ -656,6 +656,8 @@ describe('AgentBridge', () => {
 
       await bridge.setupProject('test-project', '/test/path', { codex: true });
 
+      expect(mockTmux.getOrCreateSession).not.toHaveBeenCalled();
+      expect(mockTmux.setSessionEnv).not.toHaveBeenCalled();
       expect(mockTmux.startAgentInWindow).not.toHaveBeenCalled();
     });
   });

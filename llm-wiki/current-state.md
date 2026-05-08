@@ -57,6 +57,7 @@
 - `/new-session`을 Discord thread 안에서 실행하면 parent channel이 아니라 해당 thread의 Codex app-server session만 reset한다.
 - Discord thread starter가 parent channel에 생성하는 mirror message는 bridge 입력으로 처리하지 않도록 무시한다. Discord가 messageCreate 직후 `hasThread`를 늦게 붙이는 경우도 750ms 뒤 재조회해 thread starter로 확인되면 parent channel 입력으로 처리하지 않는다. 또한 Discord `ThreadCreated` 같은 시스템 message type은 사용자 입력으로 처리하지 않는다.
 - Discord 진행 상태 노이즈를 줄이기 위해 app-server `item/started` 진행 이벤트는 채팅 메시지로 보내지 않고 Discord typing indicator로만 표시한다. 승인 요청은 계속 명시적인 카드로 표시한다.
+- Codex app-server transport 경로는 프로젝트 setup/resume 중 tmux 세션, tmux env, tmux window를 만들지 않는다. state의 `tmuxSession`에는 호환용 placeholder(`app-server:<projectName>`)만 저장한다.
 - Discord voice message는 `.ogg`/Opus 첨부로 정상 다운로드되고 Codex에 파일 경로로 전달된다.
 - Codex app-server realtime audio protocol probe 결과, `thread/realtime/*` methods는 `--experimental` 타입에 존재하지만 `realtime_conversation` feature enable이 필요하고 현재 ChatGPT auth app-server 세션에서는 `realtime conversation requires API key auth`로 실패한다.
 

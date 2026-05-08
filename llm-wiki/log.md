@@ -268,3 +268,11 @@
 - 진행 상태 메시지는 보내지 않고 Discord `sendTyping()`만 호출하도록 바꿨다.
 - 승인 요청은 사용자 결정이 필요한 이벤트라 기존처럼 별도 승인 카드로 계속 표시한다.
 - 검증: `npm run typecheck`, `npm test -- --run`(17 files, 192 tests), `npm run build` 통과.
+
+## [2026-05-08] fix | Codex app-server setup에서 tmux 의존 제거
+
+- 다른 사용자 환경에서 `agent-discord-codex` 실행 시 app-server 모드인데도 `setupProject()`가 tmux 세션을 먼저 만들려고 해 `/bin/sh: tmux: command not found`로 실패했다.
+- Codex app-server transport에서는 새 프로젝트 setup 시 tmux 세션/env/window를 만들지 않고 Discord 채널과 state만 등록하도록 수정했다.
+- 기존 프로젝트 resume 경로도 app-server Codex일 때 `TmuxManager`를 생성하거나 tmux 세션을 보장하지 않도록 수정했다.
+- state의 `tmuxSession`에는 기존 schema 호환을 위해 `app-server:<projectName>` placeholder를 저장한다.
+- 검증: `npm run typecheck`, `npm test -- --run`(17 files, 192 tests), `npm run build` 통과.
