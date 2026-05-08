@@ -341,6 +341,68 @@ describe('CodexAppServerSessionManager', () => {
     );
   });
 
+  it('suppresses noisy read-only command progress notifications', async () => {
+    const client = new FakeClient();
+    const discord = createDiscord();
+    const manager = new CodexAppServerSessionManager(client);
+
+    await manager.sendMessage({
+      projectName: 'repo',
+      projectPath: '/repo',
+      channelId: 'channel-1',
+      content: '코드 구조 확인해줘',
+      attachments: [],
+      discord,
+    });
+
+    for (const [id, command] of [
+      ['sed-1', "/bin/zsh -lc \"sed -n '1,220p' src/index.ts\""],
+      ['ls-1', '/bin/zsh -lc ls'],
+      ['rg-1', "/bin/zsh -lc 'rg --files'"],
+      ['env-1', "/bin/zsh -lc 'printenv SUPABASE_URL'"],
+    ]) {
+      await client.emitNotification({
+        method: 'item/started',
+        params: {
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          item: { type: 'commandExecution', id, command, cwd: '/repo' },
+        },
+      });
+    }
+
+    expect(discord.sendToChannel).not.toHaveBeenCalled();
+  });
+
+  it('keeps meaningful command progress notifications', async () => {
+    const client = new FakeClient();
+    const discord = createDiscord();
+    const manager = new CodexAppServerSessionManager(client);
+
+    await manager.sendMessage({
+      projectName: 'repo',
+      projectPath: '/repo',
+      channelId: 'channel-1',
+      content: '빌드해줘',
+      attachments: [],
+      discord,
+    });
+
+    await client.emitNotification({
+      method: 'item/started',
+      params: {
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        item: { type: 'commandExecution', id: 'build-1', command: 'npm run build', cwd: '/repo' },
+      },
+    });
+
+    expect(discord.sendToChannel).toHaveBeenCalledWith(
+      'channel-1',
+      expect.stringContaining('npm run build')
+    );
+  });
+
   it('converts app-server approval requests into Discord approvals', async () => {
     const client = new FakeClient();
     const discord = createDiscord();

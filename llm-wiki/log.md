@@ -238,3 +238,11 @@
 - thread 안의 일반 메시지, `!new-session`, `/new-session`은 parent channel mapping을 사용하지만, 실제 reset/응답은 thread session에만 적용된다.
 - README/README.ko/docs 한국어 README에 Discord thread는 같은 프로젝트 경로를 공유하는 독립 Codex 세션이라는 설명을 추가했다.
 - 검증: `npm run typecheck`, `npm test -- --run`(17 files, 185 tests), `npm run build` 통과.
+
+## [2026-05-08] fix | Discord thread starter 중복 처리와 command progress 노이즈 완화
+
+- Discord에서 thread를 생성할 때 parent channel에 생기는 starter/mirror message를 bridge 입력으로 처리해 parent channel과 thread 양쪽에 응답이 나가던 문제를 막았다.
+- parent channel message에 `hasThread` 또는 `thread`가 있으면 bridge input으로 무시하고, 실제 thread channel 안의 메시지만 처리한다.
+- app-server `commandExecution` started 이벤트 중 `sed`, `cat`, `ls`, `pwd`, `rg --files`, `rg -n`, `find`, `wc`, `nl`, `printenv`, `env` 같은 read-only 탐색성 명령은 Discord progress로 표시하지 않도록 했다.
+- 빌드/테스트/설치처럼 의미 있는 명령과 approval request는 계속 Discord에 표시한다.
+- 검증: `npm run typecheck`, `npm test -- --run`(17 files, 188 tests), `npm run build` 통과.

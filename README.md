@@ -7,7 +7,7 @@ Custom local bridge for using Codex from Discord, based on `DoBuDevel/discord-ag
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/Tests-185%20passing-brightgreen.svg)](./tests)
+[![Tests](https://img.shields.io/badge/Tests-188%20passing-brightgreen.svg)](./tests)
 
 ## Overview
 
@@ -136,6 +136,8 @@ CODEX_TRANSPORT=app-server agent-discord go codex
 ```
 
 In this mode Codex is started by the bridge as `codex app-server --listen stdio://`. Discord messages become Codex `turn/start` requests, assistant answers are posted back to Discord when the turn completes, and command/file-change/permission approval requests are routed to Discord reactions. There is no tmux Codex UI to attach to in this mode.
+
+To keep Discord readable, the bridge suppresses noisy read-only command progress such as `sed`, `ls`, `rg --files`, `find`, and `printenv`. Meaningful commands such as builds, tests, installs, and approval requests are still shown.
 
 When a daemon restart creates a fresh Codex app-server thread, the bridge fetches recent messages from the same Discord channel and prepends them as lightweight context to the first turn. This preserves enough conversational continuity without trying to persist Codex's internal thread state. Set `DISCORD_CONTEXT_MESSAGES=0` to disable it or another number to tune how many prior messages are included.
 

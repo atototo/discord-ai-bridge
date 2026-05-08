@@ -296,6 +296,7 @@ export class CodexAppServerSessionManager {
       case 'webSearch':
         return `🔎 웹 검색 중: \`${this.truncateInline(item.query || '')}\``;
       case 'commandExecution':
+        if (this.isNoisyReadOnlyCommand(item.command || '')) return null;
         return `🔧 명령 실행 중: \`${this.truncateInline(item.command || '')}\``;
       case 'fileChange':
         return '📝 파일 변경 준비 중...';
@@ -315,5 +316,33 @@ export class CodexAppServerSessionManager {
   private truncateInline(text: string): string {
     const normalized = text.replace(/\s+/g, ' ').trim();
     return normalized.length > 120 ? `${normalized.slice(0, 117)}...` : normalized;
+  }
+
+  private isNoisyReadOnlyCommand(command: string): boolean {
+    const inner = this.unwrapShellCommand(command);
+    return [
+      /^sed\s+-n\b/,
+      /^cat\b/,
+      /^ls(\s|$)/,
+      /^pwd(\s|$)/,
+      /^rg\s+--files\b/,
+      /^rg\s+-n\b/,
+      /^find\s+/,
+      /^wc\s+/,
+      /^nl\s+/,
+      /^printenv\b/,
+      /^env\s*$/,
+    ].some((pattern) => pattern.test(inner));
+  }
+
+  private unwrapShellCommand(command: string): string {
+    const normalized = command.replace(/\s+/g, ' ').trim();
+    const shellMatch = normalized.match(/^\/bin\/(?:zsh|bash|sh)\s+-lc\s+(['"])(.*)\1$/);
+    if (shellMatch) return shellMatch[2].trim();
+    const unquotedShellMatch = normalized.match(/^\/bin\/(?:zsh|bash|sh)\s+-lc\s+(.+)$/);
+    if (unquotedShellMatch) return unquotedShellMatch[1].trim();
+    const envShellMatch = normalized.match(/^env\s+[^;]+?\s+\/bin\/(?:zsh|bash|sh)\s+-lc\s+(['"])(.*)\1$/);
+    if (envShellMatch) return envShellMatch[2].trim();
+    return normalized;
   }
 }

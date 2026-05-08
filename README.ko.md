@@ -7,7 +7,7 @@ English version: [README.md](README.md)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/Tests-185%20passing-brightgreen.svg)](./tests)
+[![Tests](https://img.shields.io/badge/Tests-188%20passing-brightgreen.svg)](./tests)
 
 ## 개요
 
@@ -122,6 +122,8 @@ CODEX_TRANSPORT=app-server agent-discord go codex --no-attach
 ```
 
 이 모드에서는 bridge가 `codex app-server --listen stdio://`를 로컬 프로세스로 실행합니다. Discord 메시지는 Codex `turn/start` 요청으로 들어가고, assistant 답변은 turn 완료 시 Discord로 전송되며, 명령/파일/권한 승인 요청은 Discord 승인 reaction으로 라우팅됩니다. 이 모드에는 attach할 Codex tmux UI가 없습니다.
+
+Discord 채널이 너무 시끄러워지지 않도록 `sed`, `ls`, `rg --files`, `find`, `printenv` 같은 내부 탐색성 read-only 명령 진행 상태는 숨깁니다. 빌드, 테스트, 설치처럼 의미 있는 명령과 승인 요청은 계속 표시됩니다.
 
 daemon 재시작으로 Codex app-server thread가 새로 만들어질 때는 같은 Discord 채널의 최근 메시지 몇 개를 가져와 첫 turn 앞에 가벼운 맥락으로 붙입니다. Codex 내부 thread를 억지로 복원하지는 않지만, 채널의 직전 대화 흐름을 참고할 수 있습니다. `DISCORD_CONTEXT_MESSAGES=0`이면 끌 수 있고, 숫자를 바꾸면 포함할 최근 메시지 수를 조정할 수 있습니다.
 

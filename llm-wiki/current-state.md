@@ -55,6 +55,8 @@
 - Discord thread 안에서 보낸 메시지는 parent 채널 매핑으로 로컬 프로젝트 경로를 찾되, 응답/진행상태/승인요청/파일첨부는 해당 thread channel로 보낸다.
 - Codex app-server session key는 `projectName:discordChannelOrThreadId`로 분리한다. 따라서 같은 프로젝트 채널의 메인 대화와 각 Discord thread는 같은 로컬 cwd를 공유하지만 서로 다른 Codex app-server thread를 사용한다.
 - `/new-session`을 Discord thread 안에서 실행하면 parent channel이 아니라 해당 thread의 Codex app-server session만 reset한다.
+- Discord thread starter가 parent channel에 생성하는 mirror message는 bridge 입력으로 처리하지 않도록 무시한다.
+- Discord 진행 상태 노이즈를 줄이기 위해 `sed`, `ls`, `rg --files`, `find`, `printenv` 같은 내부 탐색성 read-only commandExecution started 이벤트는 숨긴다. 빌드/테스트/설치/승인 요청은 계속 표시한다.
 - Discord voice message는 `.ogg`/Opus 첨부로 정상 다운로드되고 Codex에 파일 경로로 전달된다.
 - Codex app-server realtime audio protocol probe 결과, `thread/realtime/*` methods는 `--experimental` 타입에 존재하지만 `realtime_conversation` feature enable이 필요하고 현재 ChatGPT auth app-server 세션에서는 `realtime conversation requires API key auth`로 실패한다.
 
@@ -63,7 +65,7 @@
 - `DoBuDevel/discord-agent-bridge`는 MIT license로 확인했고, `src/agents/`에 adapter를 추가하는 구조다.
 - 기존 Claude/OpenCode 흐름은 유지하면서 Codex adapter를 추가하는 MVP를 구현했다.
 - Discord allowlist와 tmux target escaping을 1차 반영했다.
-- 다음 세부 목표는 GitHub push 후 필요 시 실제 다른 프로젝트에서 Codex app-server transport, 이미지/파일 양방향 첨부, 승인 요청 왕복, `/new-session` slash command 표시/동작, Discord thread 안 응답 라우팅을 반복 smoke test하고 음성 첨부 UX를 나중에 결정하는 것이다.
+- 다음 세부 목표는 GitHub push 후 필요 시 실제 다른 프로젝트에서 Codex app-server transport, 이미지/파일 양방향 첨부, 승인 요청 왕복, `/new-session` slash command 표시/동작, Discord thread 안 응답 라우팅, noisy command progress suppression을 반복 smoke test하고 음성 첨부 UX를 나중에 결정하는 것이다.
 
 ## 다음 작업
 

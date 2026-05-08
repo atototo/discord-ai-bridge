@@ -273,6 +273,33 @@ describe('DiscordClient', () => {
       ]);
     });
 
+    it('ignores parent channel messages that are Discord thread starters', async () => {
+      const client = new DiscordClient('test-token', undefined, ['allowed-user']);
+      const callback = vi.fn();
+      client.onMessage(callback);
+      client.registerChannelMappings([
+        { channelId: 'parent-ch', projectName: 'repo', agentType: 'codex' },
+      ]);
+
+      const mockClient = getMockClient();
+      const messageCreateHandler = mockClient.on.mock.calls.find(
+        (call: any[]) => call[0] === 'messageCreate'
+      )?.[1];
+
+      await messageCreateHandler({
+        id: 'starter-msg-1',
+        author: { bot: false, id: 'allowed-user' },
+        channel: { isTextBased: () => true },
+        channelId: 'parent-ch',
+        content: '스레드에서만 처리해야 하는 시작 메시지',
+        attachments: new Map(),
+        hasThread: true,
+        thread: { id: 'thread-ch' },
+      });
+
+      expect(callback).not.toHaveBeenCalled();
+    });
+
     it('routes thread messages through the parent channel mapping but replies to the thread channel', async () => {
       const client = new DiscordClient('test-token', undefined, ['allowed-user']);
       const callback = vi.fn();

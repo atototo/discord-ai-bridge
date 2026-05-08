@@ -96,6 +96,7 @@ export class DiscordClient {
 
       // Only process text channels
       if (!message.channel.isTextBased()) return;
+      if (this.isParentThreadStarterMessage(message)) return;
 
       const channelInfo = this.resolveChannelInfo(message.channelId, message.channel);
       if (channelInfo && this.messageCallback) {
@@ -197,6 +198,13 @@ export class DiscordClient {
     if (!channel) return undefined;
     if (typeof channel.isThread === 'function' && !channel.isThread()) return undefined;
     return channel.parentId || channel.parent?.id;
+  }
+
+  private isParentThreadStarterMessage(message: any): boolean {
+    if (typeof message.channel?.isThread === 'function' && message.channel.isThread()) {
+      return false;
+    }
+    return !!(message.hasThread || message.thread);
   }
 
   private extractAttachments(attachments: any): DiscordAttachment[] {
