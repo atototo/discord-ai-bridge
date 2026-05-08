@@ -1,0 +1,271 @@
+import { splitForDiscord } from '../capture/parser.js';
+import { formatDiscordFinalAnswer } from '../discord/format.js';
+import { extractDiscordAttachments } from '../attachments/index.js';
+import type { DiscordAttachment } from '../types/index.js';
+
+export interface CodexAppServerClientLike {
+  start(): Promise<void>;
+  request(method: string, params?: unknown): Promise<any>;
+  respond(id: number | string, result: unknown): void;
+  onNotification(handler: (message: any) => void | Promise<void>): void;
+  onServerRequest(handler: (message: any) => void | Promise<void>): void;
+  stop(): void;
+}
+
+export interface CodexAppServerSendMessageParams {
+  projectName: string;
+  projectPath: string;
+  channelId: string;
+  content: string;
+  attachments: DiscordAttachment[];
+  discord: {
+    sendToChannel(channelId: string, content: string): Promise<void>;
+    sendFilesToChannel?(
+      channelId: string,
+      content: string,
+      files: string[]
+    ): Promise<void>;
+    sendApprovalRequest?(
+      channelId: string,
+      toolName: string,
+      toolInput: any,
+      timeoutMs?: number
+    ): Promise<boolean>;
+  };
+}
+
+type ThreadState = {
+  threadId: string;
+  projectPath: string;
+  channelId: string;
+  discord: CodexAppServerSendMessageParams['discord'];
+  activeTurns: Map<string, TurnState>;
+  notifiedItems: Set<string>;
+};
+
+type TurnState = {
+  text: string;
+  finalText?: string;
+};
+
+const DISCORD_OUTPUT_INSTRUCTIONS = [
+  '',
+  '[Discord bridge 지침]',
+  '- Discord에 이미지나 파일을 보여줘야 하면 로컬 경로 링크나 Markdown image만 쓰지 말고 [[discord-attach:/absolute/path]]를 별도 줄로 포함하세요.',
+  '- 프로젝트 내부 파일과 Codex generated_images 아래 이미지는 bridge가 Discord 파일 첨부로 업로드합니다.',
+].join('\n');
+
+export interface CodexAppServerSessionManagerOptions {
+  /**
+   * Deprecated. Assistant text is sent on completion so Discord receives one coherent answer.
+   */
+  streamFlushMs?: number;
+}
+
+export class CodexAppServerSessionManager {
+  private started = false;
+  private threads = new Map<string, ThreadState>();
+  private threadProjectNames = new Map<string, string>();
+
+  constructor(private client: CodexAppServerClientLike, _options: CodexAppServerSessionManagerOptions = {}) {
+    this.client.onNotification((message) => this.handleNotification(message));
+    this.client.onServerRequest((message) => this.handleServerRequest(message));
+  }
+
+  async sendMessage(params: CodexAppServerSendMessageParams): Promise<void> {
+    await this.ensureStarted();
+    const thread = await this.ensureThread(params);
+    thread.channelId = params.channelId;
+    thread.discord = params.discord;
+
+    await this.client.request('turn/start', {
+      threadId: thread.threadId,
+      cwd: params.projectPath,
+      input: this.buildUserInput(params.content, params.attachments),
+    });
+  }
+
+  stop(): void {
+    this.client.stop();
+  }
+
+  private async ensureStarted(): Promise<void> {
+    if (this.started) return;
+    await this.client.start();
+    this.started = true;
+  }
+
+  private async ensureThread(params: CodexAppServerSendMessageParams): Promise<ThreadState> {
+    const existing = this.threads.get(params.projectName);
+    if (existing) return existing;
+
+    const response = await this.client.request('thread/start', {
+      cwd: params.projectPath,
+      approvalPolicy: 'on-request',
+      approvalsReviewer: 'user',
+      sessionStartSource: 'startup',
+    });
+    const threadId = response?.thread?.id;
+    if (!threadId) {
+      throw new Error('Codex app-server did not return a thread id');
+    }
+
+    const thread = {
+      threadId,
+      projectPath: params.projectPath,
+      channelId: params.channelId,
+      discord: params.discord,
+      activeTurns: new Map<string, TurnState>(),
+      notifiedItems: new Set<string>(),
+    };
+    this.threads.set(params.projectName, thread);
+    this.threadProjectNames.set(threadId, params.projectName);
+    return thread;
+  }
+
+  private buildUserInput(content: string, attachments: DiscordAttachment[]): any[] {
+    const input: any[] = [{ type: 'text', text: `${content}${DISCORD_OUTPUT_INSTRUCTIONS}`, text_elements: [] }];
+    for (const attachment of attachments) {
+      if (!attachment.localPath) continue;
+      if ((attachment.contentType || '').startsWith('image/')) {
+        input.push({ type: 'localImage', path: attachment.localPath });
+      } else {
+        input[0].text += `\n첨부 파일: ${attachment.name}: ${attachment.localPath}`;
+      }
+    }
+    return input;
+  }
+
+  private async handleNotification(message: any): Promise<void> {
+    if (message.method === 'item/agentMessage/delta') {
+      const params = message.params || {};
+      const thread = this.getThreadById(params.threadId);
+      if (!thread || !params.turnId) return;
+      const turn = thread.activeTurns.get(params.turnId) || { text: '' };
+      turn.text += params.delta || '';
+      thread.activeTurns.set(params.turnId, turn);
+      return;
+    }
+
+    if (message.method === 'item/completed') {
+      const params = message.params || {};
+      const thread = this.getThreadById(params.threadId);
+      const item = params.item;
+      if (!thread || !params.turnId || item?.type !== 'agentMessage') return;
+      const turn = thread.activeTurns.get(params.turnId) || { text: '' };
+      turn.finalText = item.text || '';
+      thread.activeTurns.set(params.turnId, turn);
+      return;
+    }
+
+    if (message.method === 'item/started') {
+      const params = message.params || {};
+      const thread = this.getThreadById(params.threadId);
+      if (!thread || !params.item) return;
+      await this.sendItemProgress(thread, params.item);
+      return;
+    }
+
+    if (message.method === 'turn/completed') {
+      const params = message.params || {};
+      const turnId = params.turn?.id;
+      const thread = this.getThreadById(params.threadId);
+      if (!thread || !turnId) return;
+      const turn = thread.activeTurns.get(turnId);
+      const content = (turn?.finalText || turn?.text || '').trim();
+      thread.activeTurns.delete(turnId);
+      if (!content) {
+        await thread.discord.sendToChannel(thread.channelId, '✅ 완료');
+        return;
+      }
+      await this.sendFinalAnswer(thread, content);
+    }
+  }
+
+  private async handleServerRequest(message: any): Promise<void> {
+    if (message.id === undefined) return;
+    const params = message.params || {};
+    const thread = this.getThreadById(params.threadId);
+
+    const approvalToolName = this.approvalToolName(message.method);
+    if (approvalToolName) {
+      const approved = thread?.discord.sendApprovalRequest
+        ? await thread.discord.sendApprovalRequest(thread.channelId, approvalToolName, params)
+        : false;
+      this.client.respond(message.id, { decision: approved ? 'accept' : 'decline' });
+      return;
+    }
+
+    this.client.respond(message.id, null);
+  }
+
+  private getThreadById(threadId: string | undefined): ThreadState | undefined {
+    if (!threadId) return undefined;
+    const projectName = this.threadProjectNames.get(threadId);
+    return projectName ? this.threads.get(projectName) : undefined;
+  }
+
+  private approvalToolName(method: string): string | null {
+    switch (method) {
+      case 'item/commandExecution/requestApproval':
+        return 'commandExecution';
+      case 'item/fileChange/requestApproval':
+        return 'fileChange';
+      case 'item/permissions/requestApproval':
+        return 'permissions';
+      default:
+        return null;
+    }
+  }
+
+  private async sendFinalAnswer(thread: ThreadState, content: string): Promise<void> {
+    const { content: cleaned, files, rejected } = extractDiscordAttachments(content, thread.projectPath);
+    const rejectionNote = rejected.length > 0
+      ? `\n\n⚠️ 전송하지 않은 파일: ${rejected.map((file) => `\`${file}\``).join(', ')}`
+      : '';
+    const message = `${formatDiscordFinalAnswer(cleaned)}${rejectionNote}`.trim();
+
+    if (files.length > 0 && thread.discord.sendFilesToChannel) {
+      await thread.discord.sendFilesToChannel(thread.channelId, message || '✅ 완료', files);
+      return;
+    }
+
+    for (const chunk of splitForDiscord(message || '✅ 완료')) {
+      await thread.discord.sendToChannel(thread.channelId, chunk);
+    }
+  }
+
+  private async sendItemProgress(thread: ThreadState, item: any): Promise<void> {
+    if (!item?.id || thread.notifiedItems.has(item.id)) return;
+    const message = this.formatItemProgress(item);
+    if (!message) return;
+    thread.notifiedItems.add(item.id);
+    await thread.discord.sendToChannel(thread.channelId, message);
+  }
+
+  private formatItemProgress(item: any): string | null {
+    switch (item.type) {
+      case 'webSearch':
+        return `🔎 웹 검색 중: \`${this.truncateInline(item.query || '')}\``;
+      case 'commandExecution':
+        return `🔧 명령 실행 중: \`${this.truncateInline(item.command || '')}\``;
+      case 'fileChange':
+        return '📝 파일 변경 준비 중...';
+      case 'mcpToolCall':
+        return `🧩 MCP 도구 사용 중: \`${this.truncateInline(`${item.server || 'mcp'}:${item.tool || 'tool'}`)}\``;
+      case 'dynamicToolCall':
+        return `🧰 도구 사용 중: \`${this.truncateInline(`${item.namespace ? `${item.namespace}.` : ''}${item.tool || 'tool'}`)}\``;
+      case 'imageView':
+        return `🖼️ 이미지 확인 중: \`${this.truncateInline(item.path || '')}\``;
+      case 'imageGeneration':
+        return '🎨 이미지 생성 중...';
+      default:
+        return null;
+    }
+  }
+
+  private truncateInline(text: string): string {
+    const normalized = text.replace(/\s+/g, ' ').trim();
+    return normalized.length > 120 ? `${normalized.slice(0, 117)}...` : normalized;
+  }
+}

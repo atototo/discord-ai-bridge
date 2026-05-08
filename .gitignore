@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.omc/
+.claude/
+*.log
+.env*
+.DS_Store
+coverage/
+*.tgz
+_upstream/
+.idea/
+.agent-discord/
