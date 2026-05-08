@@ -18,6 +18,8 @@ export interface ProjectState {
   agents: {
     [agentType: string]: boolean;  // agentType -> enabled
   };
+  yolo?: boolean;
+  sandbox?: boolean;
   createdAt: Date;
   lastActive: Date;
 }

@@ -61,6 +61,7 @@ export class ConfigManager {
           ? parseInt(this.env.get('DISCORD_CONTEXT_MESSAGES')!, 10)
           : 12,
         codexTransport: this.env.get('CODEX_TRANSPORT') === 'app-server' ? 'app-server' : 'tmux',
+        codexYolo: this.env.get('CODEX_YOLO') === '1' || this.env.get('CODEX_YOLO') === 'true',
       };
     }
     return this._config;

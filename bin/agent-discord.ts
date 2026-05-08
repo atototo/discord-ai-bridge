@@ -277,6 +277,12 @@ program
       const projectPath = process.cwd();
       const projectName = options.name || basename(projectPath);
       const port = defaultDaemonManager.getPort();
+      const yolo = !!options.yolo;
+      const sandbox = !!options.sandbox;
+
+      if (yolo) {
+        process.env.CODEX_YOLO = '1';
+      }
 
       console.log(chalk.cyan(`\n🚀 agent-discord go — ${projectName}\n`));
 
@@ -344,8 +350,6 @@ program
         }
       }
 
-      const yolo = !!options.yolo;
-      const sandbox = !!options.sandbox;
       const usesCodexAppServer = agentName === 'codex' && config.codexTransport === 'app-server';
       const tmux = usesCodexAppServer ? null : new TmuxManager('agent-');
 
@@ -388,6 +392,22 @@ program
       } else {
         // Existing project: ensure tmux session and selected agent window exist
         const adapter = agentRegistry.get(agentName)!;
+        if (yolo || sandbox) {
+          stateManager.setProject({
+            ...existingProject,
+            yolo: existingProject.yolo || yolo,
+            sandbox: existingProject.sandbox || sandbox,
+          });
+          try {
+            const http = await import('http');
+            await new Promise<void>((resolve) => {
+              const req = http.request(`http://127.0.0.1:${port}/reload`, { method: 'POST' }, () => resolve());
+              req.on('error', () => resolve());
+              req.setTimeout(2000, () => { req.destroy(); resolve(); });
+              req.end();
+            });
+          } catch { /* daemon will pick up on next restart */ }
+        }
         if (!usesCodexAppServer) {
           const tmuxSession = tmux!.getOrCreateSession(projectName);
           // Set env vars on existing session too

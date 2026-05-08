@@ -96,6 +96,28 @@ describe('CodexAppServerSessionManager', () => {
     expect(turn?.params.input[0].text).toContain('Discord에 이미지나 파일을 보여줘야 하면');
   });
 
+  it('starts app-server threads in yolo mode without approvals or sandboxing', async () => {
+    const client = new FakeClient();
+    const manager = new CodexAppServerSessionManager(client);
+
+    await manager.sendMessage({
+      projectName: 'repo',
+      projectPath: '/repo',
+      channelId: 'channel-1',
+      content: '진행해',
+      attachments: [],
+      yolo: true,
+      discord: createDiscord(),
+    });
+
+    const threadStart = client.requests.find((request) => request.method === 'thread/start');
+    expect(threadStart?.params).toEqual(expect.objectContaining({
+      cwd: '/repo',
+      approvalPolicy: 'never',
+      sandbox: 'danger-full-access',
+    }));
+  });
+
   it('includes recent Discord channel context only when starting a new app-server thread', async () => {
     const client = new FakeClient();
     const manager = new CodexAppServerSessionManager(client);

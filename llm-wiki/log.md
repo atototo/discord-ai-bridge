@@ -283,3 +283,11 @@
 - `turn/start` 성공 직후 바로 Discord typing indicator를 보내고, turn completion 전까지 8초마다 갱신하도록 바꿨다.
 - `turn/completed`, `resetThread`, `stop` 시 typing interval을 정리해 오래 남는 timer를 막는다.
 - 검증: `npm run typecheck`, `npm test -- --run`(17 files, 193 tests), `npm run build` 통과.
+
+## [2026-05-08] feature | Codex app-server YOLO 모드 연결
+
+- `agent-discord-codex --yolo`와 `CODEX_YOLO=1` 경로를 추가해 Codex app-server thread를 승인/샌드박스 생략 모드로 시작할 수 있게 했다.
+- YOLO mode에서는 Codex `thread/start` payload가 `approvalPolicy: never`, `sandbox: danger-full-access`를 사용한다.
+- 프로젝트 state에 `yolo`/`sandbox` 플래그를 저장하고, 기존 프로젝트에서 `--yolo`로 재실행하면 state를 갱신한 뒤 daemon reload를 요청한다.
+- README/README.ko/docs 한국어 README에 `agent-discord-codex --yolo`와 `CODEX_YOLO=1` 사용법 및 위험성을 정리했다.
+- 검증: `npm run typecheck`, `npm test -- --run`(17 files, 195 tests), `npm run build` 통과.

@@ -160,6 +160,7 @@ export class AgentBridge {
           channelId,
           content,
           attachments: downloadedAttachments,
+          yolo: project.yolo || this.bridgeConfig.codexYolo,
           recentMessages,
           discord: this.discord,
         });
@@ -356,6 +357,8 @@ export class AgentBridge {
       tmuxSession,
       discordChannels,
       agents,
+      yolo,
+      sandbox,
       createdAt: new Date(),
       lastActive: new Date(),
     };

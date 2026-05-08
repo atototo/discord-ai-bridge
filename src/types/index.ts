@@ -56,6 +56,7 @@ export interface BridgeConfig {
   capturePollIntervalMs?: number;
   discordContextMessages?: number;
   codexTransport?: 'tmux' | 'app-server';
+  codexYolo?: boolean;
 }
 
 export interface ProjectAgents {
@@ -70,6 +71,8 @@ export interface ProjectState {
     [agentType: string]: string | undefined;
   };
   agents: ProjectAgents;
+  yolo?: boolean;
+  sandbox?: boolean;
   createdAt: Date;
   lastActive: Date;
 }

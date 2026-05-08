@@ -117,6 +117,7 @@ agent-discord-codex
 
 ```bash
 agent-discord-codex             # 현재 디렉터리에서 Codex app-server 시작
+agent-discord-codex --yolo      # Codex app-server YOLO 모드: 승인/샌드박스 생략
 agent-discord-down              # bridge daemon 종료
 agent-discord daemon status     # daemon 상태와 로그 위치 확인
 agent-discord go claude         # Claude Code tmux 모드
@@ -130,6 +131,8 @@ CODEX_TRANSPORT=app-server agent-discord go codex --no-attach
 ```
 
 이 모드에서는 bridge가 `codex app-server --listen stdio://`를 로컬 프로세스로 실행합니다. Discord 메시지는 Codex `turn/start` 요청으로 들어가고, assistant 답변은 turn 완료 시 Discord로 전송되며, 명령/파일/권한 승인 요청은 Discord 승인 reaction으로 라우팅됩니다. 이 모드에는 attach할 Codex tmux UI가 없습니다.
+
+YOLO 모드는 `agent-discord-codex --yolo` 또는 `CODEX_YOLO=1`로 켤 수 있습니다. Codex app-server에서는 thread를 `approvalPolicy: never`, `sandbox: danger-full-access`로 시작하므로 명령/파일/권한 작업에 대해 Discord 승인을 묻지 않습니다.
 
 Discord 채널이 너무 시끄러워지지 않도록 `sed`, `ls`, `rg --files`, `find`, `printenv` 같은 내부 탐색성 read-only 명령 진행 상태는 숨깁니다. 빌드, 테스트, 설치처럼 의미 있는 명령과 승인 요청은 계속 표시됩니다.
 
@@ -169,6 +172,7 @@ Discord slash UI의 첫 추천 목록에도 보이도록 `/new-session` 설명 �
 ```bash
 agent-discord daemon stop
 CODEX_TRANSPORT=app-server agent-discord go codex
+CODEX_YOLO=1 agent-discord-codex
 ```
 
 ### 파일과 이미지

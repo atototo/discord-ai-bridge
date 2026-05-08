@@ -112,6 +112,7 @@ describe('ConfigManager', () => {
       env.set('HOOK_SERVER_PORT', '7777');
       env.set('CAPTURE_POLL_INTERVAL_MS', '2500');
       env.set('DISCORD_CONTEXT_MESSAGES', '8');
+      env.set('CODEX_YOLO', '1');
 
       const manager = new ConfigManager(storage, env, configDir);
       const config = manager.config;
@@ -122,6 +123,7 @@ describe('ConfigManager', () => {
       expect(config.hookServerPort).toBe(7777);
       expect(config.capturePollIntervalMs).toBe(2500);
       expect(config.discordContextMessages).toBe(8);
+      expect(config.codexYolo).toBe(true);
     });
 
     it('stored config takes priority over env vars', () => {

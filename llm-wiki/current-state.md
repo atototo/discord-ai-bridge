@@ -58,6 +58,7 @@
 - Discord thread starter가 parent channel에 생성하는 mirror message는 bridge 입력으로 처리하지 않도록 무시한다. Discord가 messageCreate 직후 `hasThread`를 늦게 붙이는 경우도 750ms 뒤 재조회해 thread starter로 확인되면 parent channel 입력으로 처리하지 않는다. 또한 Discord `ThreadCreated` 같은 시스템 message type은 사용자 입력으로 처리하지 않는다.
 - Discord 진행 상태 노이즈를 줄이기 위해 app-server `item/started` 진행 이벤트는 채팅 메시지로 보내지 않고 Discord typing indicator로만 표시한다. typing indicator는 `turn/start` 직후 바로 표시하고 답변 완료 전까지 8초마다 갱신한다. 승인 요청은 계속 명시적인 카드로 표시한다.
 - Codex app-server transport 경로는 프로젝트 setup/resume 중 tmux 세션, tmux env, tmux window를 만들지 않는다. state의 `tmuxSession`에는 호환용 placeholder(`app-server:<projectName>`)만 저장한다.
+- Codex app-server YOLO 모드를 추가했다. `agent-discord-codex --yolo` 또는 `CODEX_YOLO=1`로 daemon/project를 시작하면 Codex `thread/start`에 `approvalPolicy: never`, `sandbox: danger-full-access`를 넘겨 Discord 승인 요청 없이 실행한다.
 - Discord voice message는 `.ogg`/Opus 첨부로 정상 다운로드되고 Codex에 파일 경로로 전달된다.
 - Codex app-server realtime audio protocol probe 결과, `thread/realtime/*` methods는 `--experimental` 타입에 존재하지만 `realtime_conversation` feature enable이 필요하고 현재 ChatGPT auth app-server 세션에서는 `realtime conversation requires API key auth`로 실패한다.
 
@@ -74,7 +75,8 @@
 2. daemon 재시작 후 Discord slash UI에서 `/new-session`과 `with-context` 옵션 설명이 보이는지 실제 서버에서 확인한다.
 3. Discord thread 안에서 메시지를 보내면 봇 응답과 승인 요청이 thread 안으로 들어가고, parent 채널과 Codex 세션이 분리되는지 smoke test한다.
 4. 다른 로컬 프로젝트 경로에서 `agent-discord-codex`로 새 channel/category 생성 또는 재사용 흐름을 다시 확인한다.
-5. Discord voice message를 API key auth 기반 realtime audio로 처리할지, 아니면 로컬 도구 승인 기반 파일 처리 UX로 유지할지 나중에 결정한다.
+5. 필요하면 `agent-discord-codex --yolo`로 실제 Discord smoke test를 실행해 승인 카드 없이 명령/파일 작업이 진행되는지 확인한다.
+6. Discord voice message를 API key auth 기반 realtime audio로 처리할지, 아니면 로컬 도구 승인 기반 파일 처리 UX로 유지할지 나중에 결정한다.
 
 ## 열린 질문 / 블로커
 

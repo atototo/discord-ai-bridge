@@ -120,6 +120,7 @@ Run this once from each local project path you want to connect. For example, run
 
 ```bash
 agent-discord-codex             # Codex app-server mode for this directory
+agent-discord-codex --yolo      # Codex app-server YOLO mode: no approvals, no sandbox
 agent-discord-down              # Stop the bridge daemon
 agent-discord daemon status     # Check daemon status and log path
 agent-discord go claude         # tmux mode for Claude Code
@@ -136,6 +137,8 @@ CODEX_TRANSPORT=app-server agent-discord go codex
 ```
 
 In this mode Codex is started by the bridge as `codex app-server --listen stdio://`. Discord messages become Codex `turn/start` requests, assistant answers are posted back to Discord when the turn completes, and command/file-change/permission approval requests are routed to Discord reactions. There is no tmux Codex UI to attach to in this mode.
+
+YOLO mode is available with `agent-discord-codex --yolo` or `CODEX_YOLO=1`. In Codex app-server mode this starts threads with `approvalPolicy: never` and `sandbox: danger-full-access`, so Codex will not ask Discord for command/file/permission approvals.
 
 To keep Discord readable, the bridge suppresses noisy read-only command progress such as `sed`, `ls`, `rg --files`, `find`, and `printenv`. Meaningful commands such as builds, tests, installs, and approval requests are still shown.
 
@@ -476,6 +479,7 @@ Config values can be overridden with environment variables:
 | `HOOK_SERVER_PORT` | No | Port for the hook server | `18470` |
 | `CAPTURE_POLL_INTERVAL_MS` | No | tmux capture polling interval | `3000` |
 | `CODEX_TRANSPORT` | No | Codex transport: `tmux` or `app-server` | `tmux` |
+| `CODEX_YOLO` | No | Codex app-server YOLO mode (`1`/`true` skips approvals and sandbox) | disabled |
 | `DISCORD_CONTEXT_MESSAGES` | No | Recent channel messages to include when a new Codex app-server thread starts | `12` |
 
 ```bash
@@ -483,6 +487,7 @@ DISCORD_BOT_TOKEN=token agent-discord daemon start
 DISCORD_GUILD_ID=server_id agent-discord go
 DISCORD_ALLOWED_USER_IDS=user_id_1,user_id_2 agent-discord go codex
 CODEX_TRANSPORT=app-server agent-discord go codex
+CODEX_YOLO=1 agent-discord-codex
 ```
 
 ## Development

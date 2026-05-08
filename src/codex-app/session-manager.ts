@@ -19,6 +19,7 @@ export interface CodexAppServerSendMessageParams {
   channelId: string;
   content: string;
   attachments: DiscordAttachment[];
+  yolo?: boolean;
   recentMessages?: DiscordRecentMessage[];
   discord: {
     sendToChannel(channelId: string, content: string): Promise<void>;
@@ -127,8 +128,9 @@ export class CodexAppServerSessionManager {
 
     const response = await this.client.request('thread/start', {
       cwd: params.projectPath,
-      approvalPolicy: 'on-request',
+      approvalPolicy: params.yolo ? 'never' : 'on-request',
       approvalsReviewer: 'user',
+      ...(params.yolo ? { sandbox: 'danger-full-access' } : {}),
       sessionStartSource: 'startup',
     });
     const threadId = response?.thread?.id;
