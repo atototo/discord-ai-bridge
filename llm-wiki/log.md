@@ -291,3 +291,11 @@
 - 프로젝트 state에 `yolo`/`sandbox` 플래그를 저장하고, 기존 프로젝트에서 `--yolo`로 재실행하면 state를 갱신한 뒤 daemon reload를 요청한다.
 - README/README.ko/docs 한국어 README에 `agent-discord-codex --yolo`와 `CODEX_YOLO=1` 사용법 및 위험성을 정리했다.
 - 검증: `npm run typecheck`, `npm test -- --run`(17 files, 195 tests), `npm run build` 통과.
+
+## [2026-05-08] fix | Discord 첨부 10개 제한 대응
+
+- Discord API가 메시지 하나당 첨부 파일 10개까지만 허용해 Codex가 이미지 16개를 한 번에 보내면 `attachments[BASE_TYPE_MAX_LENGTH]: Must be 10 or fewer in length`로 전송 실패하는 것을 확인했다.
+- `DiscordClient.sendFilesToChannel()`이 파일을 10개 이하 batch로 나눠 순차 전송하도록 수정했다.
+- 첫 batch에는 원래 완료 본문을 붙이고, 이후 batch에는 `첨부 파일 11-16` 같은 범위 안내 문구를 붙인다.
+- 검증: `npm test -- tests/discord/client.test.ts`, `npm run typecheck`, `npm test`(17 files, 196 tests), `npm run build` 통과.
+- sandbox 권한상 `/Users/winter.e/.discord-agent-bridge/daemon.log`를 열어 daemon을 재시작하는 작업은 실패했으므로, 새 dist 적용은 사용자가 로컬에서 daemon 종료 후 재시작해야 한다.

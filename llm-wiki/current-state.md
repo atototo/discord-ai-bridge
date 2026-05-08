@@ -34,6 +34,7 @@
 - Codex가 `[[discord-attach:/absolute/path]]` 마커를 응답에 넣으면 bridge가 프로젝트 내부 파일만 Discord 첨부로 업로드한다. 이 처리는 tmux poller와 app-server 최종 응답 경로 모두에 연결되어 있다.
 - Codex가 마커 없이 최종 답변 본문에 프로젝트 내부 이미지 파일 경로를 적는 경우에도 bridge가 해당 이미지를 자동 감지해 Discord 첨부로 업로드한다.
 - Codex 이미지 생성 도구가 저장하는 `~/.codex/generated_images/` 아래 이미지도 bridge outbound 업로드 허용 루트에 포함한다. 테스트에서는 `CODEX_GENERATED_IMAGES_DIR`로 이 루트를 대체할 수 있다.
+- Discord outbound 파일 첨부는 메시지당 10개 제한에 맞춰 batch 전송한다. Codex가 이미지 16개처럼 많은 파일을 보내도 첫 batch에는 완료 본문을 붙이고 후속 batch에는 첨부 범위 안내를 붙인다.
 - Codex app-server transport 1차 구현을 추가했다. `CODEX_TRANSPORT=app-server`로 daemon을 시작하면 Codex 메시지는 tmux capture 대신 `codex app-server --listen stdio://` JSON-RPC로 처리된다.
 - app-server transport는 `thread/start`, `turn/start`, `item/agentMessage/delta`, `turn/completed`, `item/commandExecution/requestApproval`, `item/fileChange/requestApproval`, `item/permissions/requestApproval` 흐름을 사용한다.
 - Discord approval UX는 Codex app-server의 `reason` 필드를 우선 보여주는 간결한 한국어 메시지로 표시한다. 전체 JSON payload는 기본 승인 카드에서 숨긴다.
@@ -67,12 +68,12 @@
 - `DoBuDevel/discord-agent-bridge`는 MIT license로 확인했고, `src/agents/`에 adapter를 추가하는 구조다.
 - 기존 Claude/OpenCode 흐름은 유지하면서 Codex adapter를 추가하는 MVP를 구현했다.
 - Discord allowlist와 tmux target escaping을 1차 반영했다.
-- 다음 세부 목표는 GitHub push 후 필요 시 실제 다른 프로젝트에서 Codex app-server transport, 이미지/파일 양방향 첨부, 승인 요청 왕복, `/new-session` slash command 표시/동작, Discord thread 안 응답 라우팅, noisy command progress suppression을 반복 smoke test하고 음성 첨부 UX를 나중에 결정하는 것이다.
+- 다음 세부 목표는 GitHub push 후 필요 시 실제 다른 프로젝트에서 Codex app-server transport, 이미지/파일 양방향 첨부, 승인 요청 왕복, `/new-session` slash command 표시/동작, Discord thread 안 응답 라우팅, noisy command progress suppression, 다중 이미지 batch 첨부를 반복 smoke test하고 음성 첨부 UX를 나중에 결정하는 것이다.
 
 ## 다음 작업
 
 1. 현재 변경사항을 커밋하고 `origin/main`에 push한다.
-2. daemon 재시작 후 Discord slash UI에서 `/new-session`과 `with-context` 옵션 설명이 보이는지 실제 서버에서 확인한다.
+2. daemon 재시작 후 Discord slash UI에서 `/new-session`과 `with-context` 옵션 설명이 보이는지, 이미지 10개 초과 첨부가 여러 메시지로 나뉘어 올라오는지 실제 서버에서 확인한다.
 3. Discord thread 안에서 메시지를 보내면 봇 응답과 승인 요청이 thread 안으로 들어가고, parent 채널과 Codex 세션이 분리되는지 smoke test한다.
 4. 다른 로컬 프로젝트 경로에서 `agent-discord-codex`로 새 channel/category 생성 또는 재사용 흐름을 다시 확인한다.
 5. 필요하면 `agent-discord-codex --yolo`로 실제 Discord smoke test를 실행해 승인 카드 없이 명령/파일 작업이 진행되는지 확인한다.

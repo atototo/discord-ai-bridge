@@ -54,6 +54,8 @@ const NEW_SESSION_COMMAND = {
   ],
 };
 
+const DISCORD_MAX_ATTACHMENTS_PER_MESSAGE = 10;
+
 export class DiscordClient {
   private client: Client;
   private token: string;
@@ -725,9 +727,26 @@ export class DiscordClient {
       for (const chunk of textChunks) {
         await (channel as TextChannel).send(chunk);
       }
-      await (channel as TextChannel).send({ content: chunks[chunks.length - 1], files });
+      const attachmentBatches = this.chunkFiles(files);
+      for (let index = 0; index < attachmentBatches.length; index += 1) {
+        const batch = attachmentBatches[index];
+        const batchStart = index * DISCORD_MAX_ATTACHMENTS_PER_MESSAGE + 1;
+        const batchEnd = batchStart + batch.length - 1;
+        const batchContent = index === 0
+          ? chunks[chunks.length - 1]
+          : `첨부 파일 ${batchStart}-${batchEnd}`;
+        await (channel as TextChannel).send({ content: batchContent, files: batch });
+      }
     } catch (error) {
       console.error(`Failed to send files to channel ${channelId}:`, error);
     }
+  }
+
+  private chunkFiles(files: string[]): string[][] {
+    const batches: string[][] = [];
+    for (let index = 0; index < files.length; index += DISCORD_MAX_ATTACHMENTS_PER_MESSAGE) {
+      batches.push(files.slice(index, index + DISCORD_MAX_ATTACHMENTS_PER_MESSAGE));
+    }
+    return batches;
   }
 }

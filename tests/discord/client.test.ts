@@ -755,6 +755,32 @@ describe('DiscordClient', () => {
       });
     });
 
+    it('sends file attachments in batches of 10 or fewer', async () => {
+      const client = new DiscordClient('test-token');
+
+      const mockChannel = {
+        isTextBased: () => true,
+        send: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const mockClient = getMockClient();
+      mockClient.channels.fetch.mockResolvedValue(mockChannel);
+
+      const files = Array.from({ length: 16 }, (_, index) => `/tmp/result-${index + 1}.png`);
+
+      await client.sendFilesToChannel('ch-123', 'files ready', files);
+
+      expect(mockChannel.send).toHaveBeenCalledTimes(2);
+      expect(mockChannel.send.mock.calls[0][0]).toEqual({
+        content: 'files ready',
+        files: files.slice(0, 10),
+      });
+      expect(mockChannel.send.mock.calls[1][0]).toEqual({
+        content: '첨부 파일 11-16',
+        files: files.slice(10),
+      });
+    });
+
     it('sendToChannel handles non-text channel gracefully', async () => {
       const client = new DiscordClient('test-token');
 
