@@ -7,7 +7,7 @@ Custom local bridge for using Codex from Discord, based on `DoBuDevel/discord-ag
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/Tests-179%20passing-brightgreen.svg)](./tests)
+[![Tests](https://img.shields.io/badge/Tests-185%20passing-brightgreen.svg)](./tests)
 
 ## Overview
 
@@ -27,6 +27,7 @@ The original tmux transport is still available for Claude/OpenCode compatibility
 - **Auto-Discovery**: Automatically detects installed AI agents on your system
 - **Real-Time Streaming**: Captures tmux output and streams to Discord every 3 seconds
 - **Project Isolation**: Each project gets a dedicated Discord channel
+- **Thread Isolation**: Discord threads inside a mapped project channel get separate Codex app-server sessions
 - **Single Daemon**: One Discord bot connection manages all projects
 - **Session Management**: Persistent tmux sessions survive disconnections
 - **Discord New Session Command**: `/new-session` resets the current channel's Codex app-server thread, with an optional context carry-over
@@ -160,6 +161,12 @@ The command is registered with a visible Discord description that mentions `with
 !new-session
 !new-session with-context
 ```
+
+### Discord Threads
+
+You can use Discord threads inside a mapped project channel to keep focused work out of the main channel. For example, a thread under `#codex-cocifee` still uses the `cocifee` project path, but gets its own Codex app-server session keyed by the thread channel ID.
+
+Messages, progress updates, approval requests, generated images, and file uploads stay inside the thread where the request started. The parent channel keeps its own separate Codex session. Running `/new-session` inside a thread resets only that thread's Codex session.
 
 If the daemon is already running with a different transport, restart it with the same environment first:
 

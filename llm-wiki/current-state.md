@@ -52,6 +52,9 @@
 - README/README.ko/docs 한국어 README에는 이 repo가 `DoBuDevel/discord-agent-bridge` 기반으로 가져와 `atototo/discord-ai-bridge`로 커스텀한 source-install repo라는 설명을 반영했다.
 - Discord slash command `/new-session`을 추가했다. 기본값은 현재 Discord 채널/프로젝트 매핑은 유지하고 Codex app-server thread만 새로 시작하며, 다음 메시지에는 이전 Discord 맥락을 붙이지 않는다.
 - `/new-session`의 선택 옵션 `with-context`를 true로 주면 새 Codex app-server thread를 만들되 다음 첫 메시지에 최근 Discord 채널 대화 맥락을 붙인다. slash command가 보이지 않을 때를 위한 텍스트 fallback `!new-session`, `!new-session with-context`도 지원한다.
+- Discord thread 안에서 보낸 메시지는 parent 채널 매핑으로 로컬 프로젝트 경로를 찾되, 응답/진행상태/승인요청/파일첨부는 해당 thread channel로 보낸다.
+- Codex app-server session key는 `projectName:discordChannelOrThreadId`로 분리한다. 따라서 같은 프로젝트 채널의 메인 대화와 각 Discord thread는 같은 로컬 cwd를 공유하지만 서로 다른 Codex app-server thread를 사용한다.
+- `/new-session`을 Discord thread 안에서 실행하면 parent channel이 아니라 해당 thread의 Codex app-server session만 reset한다.
 - Discord voice message는 `.ogg`/Opus 첨부로 정상 다운로드되고 Codex에 파일 경로로 전달된다.
 - Codex app-server realtime audio protocol probe 결과, `thread/realtime/*` methods는 `--experimental` 타입에 존재하지만 `realtime_conversation` feature enable이 필요하고 현재 ChatGPT auth app-server 세션에서는 `realtime conversation requires API key auth`로 실패한다.
 
@@ -60,14 +63,15 @@
 - `DoBuDevel/discord-agent-bridge`는 MIT license로 확인했고, `src/agents/`에 adapter를 추가하는 구조다.
 - 기존 Claude/OpenCode 흐름은 유지하면서 Codex adapter를 추가하는 MVP를 구현했다.
 - Discord allowlist와 tmux target escaping을 1차 반영했다.
-- 다음 세부 목표는 GitHub push 후 필요 시 실제 다른 프로젝트에서 Codex app-server transport, 이미지/파일 양방향 첨부, 승인 요청 왕복, `/new-session` slash command 표시/동작을 반복 smoke test하고 음성 첨부 UX를 나중에 결정하는 것이다.
+- 다음 세부 목표는 GitHub push 후 필요 시 실제 다른 프로젝트에서 Codex app-server transport, 이미지/파일 양방향 첨부, 승인 요청 왕복, `/new-session` slash command 표시/동작, Discord thread 안 응답 라우팅을 반복 smoke test하고 음성 첨부 UX를 나중에 결정하는 것이다.
 
 ## 다음 작업
 
 1. 현재 변경사항을 커밋하고 `origin/main`에 push한다.
 2. daemon 재시작 후 Discord slash UI에서 `/new-session`과 `with-context` 옵션 설명이 보이는지 실제 서버에서 확인한다.
-3. 다른 로컬 프로젝트 경로에서 `agent-discord-codex`로 새 channel/category 생성 또는 재사용 흐름을 다시 확인한다.
-4. Discord voice message를 API key auth 기반 realtime audio로 처리할지, 아니면 로컬 도구 승인 기반 파일 처리 UX로 유지할지 나중에 결정한다.
+3. Discord thread 안에서 메시지를 보내면 봇 응답과 승인 요청이 thread 안으로 들어가고, parent 채널과 Codex 세션이 분리되는지 smoke test한다.
+4. 다른 로컬 프로젝트 경로에서 `agent-discord-codex`로 새 channel/category 생성 또는 재사용 흐름을 다시 확인한다.
+5. Discord voice message를 API key auth 기반 realtime audio로 처리할지, 아니면 로컬 도구 승인 기반 파일 처리 UX로 유지할지 나중에 결정한다.
 
 ## 열린 질문 / 블로커
 

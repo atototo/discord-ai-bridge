@@ -273,6 +273,34 @@ describe('DiscordClient', () => {
       ]);
     });
 
+    it('routes thread messages through the parent channel mapping but replies to the thread channel', async () => {
+      const client = new DiscordClient('test-token', undefined, ['allowed-user']);
+      const callback = vi.fn();
+      client.onMessage(callback);
+      client.registerChannelMappings([
+        { channelId: 'parent-ch', projectName: 'repo', agentType: 'codex' },
+      ]);
+
+      const mockClient = getMockClient();
+      const messageCreateHandler = mockClient.on.mock.calls.find(
+        (call: any[]) => call[0] === 'messageCreate'
+      )?.[1];
+
+      await messageCreateHandler({
+        id: 'thread-msg-1',
+        author: { bot: false, id: 'allowed-user' },
+        channel: { isTextBased: () => true, isThread: () => true, parentId: 'parent-ch' },
+        channelId: 'thread-ch',
+        content: '스레드에서 진행해줘',
+        attachments: new Map(),
+      });
+
+      expect(callback).toHaveBeenCalledWith('codex', '스레드에서 진행해줘', 'repo', 'thread-ch', {
+        messageId: 'thread-msg-1',
+        attachments: [],
+      });
+    });
+
     it('handles text fallback new-session command without forwarding it as a normal message', async () => {
       const client = new DiscordClient('test-token', undefined, ['allowed-user']);
       const messageCallback = vi.fn();
@@ -302,6 +330,44 @@ describe('DiscordClient', () => {
         projectName: 'repo',
         agentType: 'codex',
         withContext: true,
+      });
+      expect(messageCallback).not.toHaveBeenCalled();
+    });
+
+    it('handles text fallback new-session command inside a thread', async () => {
+      const client = new DiscordClient('test-token', undefined, ['allowed-user']);
+      const messageCallback = vi.fn();
+      const sessionCallback = vi.fn();
+      client.onMessage(messageCallback);
+      client.onNewSession(sessionCallback);
+      client.registerChannelMappings([
+        { channelId: 'parent-ch', projectName: 'repo', agentType: 'codex' },
+      ]);
+
+      const mockClient = getMockClient();
+      const messageCreateHandler = mockClient.on.mock.calls.find(
+        (call: any[]) => call[0] === 'messageCreate'
+      )?.[1];
+
+      await messageCreateHandler({
+        id: 'thread-msg-2',
+        author: { bot: false, id: 'allowed-user' },
+        channel: {
+          isTextBased: () => true,
+          isThread: () => true,
+          parentId: 'parent-ch',
+          send: vi.fn().mockResolvedValue(undefined),
+        },
+        channelId: 'thread-ch',
+        content: '!new-session',
+        attachments: new Map(),
+      });
+
+      expect(sessionCallback).toHaveBeenCalledWith({
+        channelId: 'thread-ch',
+        projectName: 'repo',
+        agentType: 'codex',
+        withContext: false,
       });
       expect(messageCallback).not.toHaveBeenCalled();
     });
@@ -356,6 +422,36 @@ describe('DiscordClient', () => {
         projectName: 'repo',
         agentType: 'codex',
         withContext: true,
+      });
+    });
+
+    it('handles the new-session slash command inside a thread', async () => {
+      const client = new DiscordClient('test-token', undefined, ['allowed-user']);
+      const sessionCallback = vi.fn();
+      client.onNewSession(sessionCallback);
+      client.registerChannelMappings([
+        { channelId: 'parent-ch', projectName: 'repo', agentType: 'codex' },
+      ]);
+
+      const mockClient = getMockClient();
+      const interactionHandler = mockClient.on.mock.calls.find(
+        (call: any[]) => call[0] === 'interactionCreate'
+      )?.[1];
+      await interactionHandler({
+        isChatInputCommand: () => true,
+        commandName: 'new-session',
+        channelId: 'thread-ch',
+        channel: { isThread: () => true, parentId: 'parent-ch' },
+        user: { id: 'allowed-user', bot: false },
+        options: { getBoolean: vi.fn().mockReturnValue(false) },
+        reply: vi.fn().mockResolvedValue(undefined),
+      });
+
+      expect(sessionCallback).toHaveBeenCalledWith({
+        channelId: 'thread-ch',
+        projectName: 'repo',
+        agentType: 'codex',
+        withContext: false,
       });
     });
   });

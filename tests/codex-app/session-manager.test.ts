@@ -164,6 +164,33 @@ describe('CodexAppServerSessionManager', () => {
     expect(turns[1].params.input[0].text).toContain('참고할 이전 대화');
   });
 
+  it('keeps separate app-server threads for separate session keys in the same project', async () => {
+    const client = new FakeClient();
+    const manager = new CodexAppServerSessionManager(client);
+
+    await manager.sendMessage({
+      projectName: 'repo',
+      sessionKey: 'repo:main-channel',
+      projectPath: '/repo',
+      channelId: 'main-channel',
+      content: '메인 채널 메시지',
+      attachments: [],
+      discord: createDiscord(),
+    });
+
+    await manager.sendMessage({
+      projectName: 'repo',
+      sessionKey: 'repo:thread-channel',
+      projectPath: '/repo',
+      channelId: 'thread-channel',
+      content: '스레드 메시지',
+      attachments: [],
+      discord: createDiscord(),
+    });
+
+    expect(client.requests.filter((request) => request.method === 'thread/start')).toHaveLength(2);
+  });
+
   it('streams agent deltas to Discord only when the turn completes', async () => {
     const client = new FakeClient();
     const discord = createDiscord();

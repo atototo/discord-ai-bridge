@@ -149,11 +149,13 @@ export class AgentBridge {
           await this.discord.sendToChannel(channelId, '⚠️ Codex app-server transport is not initialized');
           return;
         }
-        const recentMessages = await this.shouldLoadRecentDiscordContext(projectName)
+        const sessionKey = this.codexSessionKey(projectName, channelId);
+        const recentMessages = await this.shouldLoadRecentDiscordContext(sessionKey)
           ? await this.loadRecentDiscordContext(channelId, meta.messageId)
           : [];
         await this.codexAppServer.sendMessage({
           projectName,
+          sessionKey,
           projectPath: project.projectPath,
           channelId,
           content,
@@ -198,15 +200,20 @@ export class AgentBridge {
       return;
     }
 
-    this.codexAppServer.resetThread(request.projectName);
-    this.nextCodexSessionWithContext.set(request.projectName, request.withContext);
+    const sessionKey = this.codexSessionKey(request.projectName, request.channelId);
+    this.codexAppServer.resetThread(sessionKey);
+    this.nextCodexSessionWithContext.set(sessionKey, request.withContext);
   }
 
-  private shouldLoadRecentDiscordContext(projectName: string): boolean {
-    if (!this.nextCodexSessionWithContext.has(projectName)) return true;
-    const shouldLoad = this.nextCodexSessionWithContext.get(projectName) ?? false;
-    this.nextCodexSessionWithContext.delete(projectName);
+  private shouldLoadRecentDiscordContext(sessionKey: string): boolean {
+    if (!this.nextCodexSessionWithContext.has(sessionKey)) return true;
+    const shouldLoad = this.nextCodexSessionWithContext.get(sessionKey) ?? false;
+    this.nextCodexSessionWithContext.delete(sessionKey);
     return shouldLoad;
+  }
+
+  private codexSessionKey(projectName: string, channelId: string): string {
+    return `${projectName}:${channelId}`;
   }
 
   private async loadRecentDiscordContext(channelId: string, beforeMessageId: string) {

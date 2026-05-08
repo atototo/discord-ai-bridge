@@ -7,7 +7,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/Tests-179%20passing-brightgreen.svg)](../tests)
+[![Tests](https://img.shields.io/badge/Tests-185%20passing-brightgreen.svg)](../tests)
 
 ## 개요
 
@@ -24,6 +24,7 @@ Discord AI Bridge는 AI 코딩 어시스턴트(Codex, Claude Code, OpenCode)를 
 - **자동 감지**: 시스템에 설치된 AI 에이전트를 자동으로 감지
 - **실시간 스트리밍**: 3초마다 tmux 출력을 캡처하여 Discord로 전송
 - **프로젝트 격리**: 각 프로젝트마다 전용 Discord 채널 생성
+- **스레드 격리**: 프로젝트 채널 안의 Discord 스레드는 별도 Codex app-server 세션으로 처리
 - **단일 데몬**: 하나의 Discord 봇 연결로 모든 프로젝트 관리
 - **세션 관리**: tmux 세션은 연결 해제 후에도 유지
 - **Discord 새 세션 명령**: `/new-session`으로 현재 채널의 Codex app-server thread만 새로 시작
@@ -154,6 +155,12 @@ Discord slash UI의 첫 추천 목록에도 보이도록 `/new-session` 설명 �
 !new-session
 !new-session with-context
 ```
+
+### Discord 스레드에서 작업하기
+
+매핑된 프로젝트 채널 안에서는 Discord 스레드를 작업 단위로 사용할 수 있습니다. 예를 들어 `#codex-cocifee` 아래의 `admin web 개선` 스레드는 같은 `cocifee` 로컬 프로젝트 경로를 쓰지만, Codex app-server 세션은 스레드 channel ID 기준으로 별도 생성됩니다.
+
+스레드에서 시작한 메시지, 진행 상태, 승인 요청, 생성 이미지, 파일 업로드는 모두 해당 스레드 안으로 전송됩니다. 부모 채널 `#codex-cocifee`의 메인 대화와 Codex 세션은 따로 유지됩니다. 스레드 안에서 `/new-session`을 실행하면 그 스레드의 Codex 세션만 리셋됩니다.
 
 이미 daemon이 떠 있다면 같은 환경변수로 다시 띄워야 합니다.
 

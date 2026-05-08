@@ -97,7 +97,7 @@ export class DiscordClient {
       // Only process text channels
       if (!message.channel.isTextBased()) return;
 
-      const channelInfo = this.channelMapping.get(message.channelId);
+      const channelInfo = this.resolveChannelInfo(message.channelId, message.channel);
       if (channelInfo && this.messageCallback) {
         if (!this.isUserAllowed(message.author.id)) return;
         if (await this.handleTextNewSessionCommand(message, channelInfo)) return;
@@ -135,7 +135,7 @@ export class DiscordClient {
       return;
     }
 
-    const channelInfo = this.channelMapping.get(interaction.channelId);
+    const channelInfo = this.resolveChannelInfo(interaction.channelId, interaction.channel);
     if (!channelInfo) {
       await interaction.reply?.({ content: '⚠️ 이 채널은 bridge 프로젝트 채널로 등록되어 있지 않습니다.', ephemeral: true });
       return;
@@ -183,6 +183,20 @@ export class DiscordClient {
     return withContext
       ? '✅ 새 Codex 세션으로 전환했습니다. 다음 메시지는 최근 Discord 대화 맥락을 참고합니다.'
       : '✅ 새 Codex 세션으로 전환했습니다. 다음 메시지는 이전 맥락 없이 시작합니다.';
+  }
+
+  private resolveChannelInfo(channelId: string, channel?: any): ChannelInfo | undefined {
+    const direct = this.channelMapping.get(channelId);
+    if (direct) return direct;
+
+    const parentId = this.parentChannelId(channel);
+    return parentId ? this.channelMapping.get(parentId) : undefined;
+  }
+
+  private parentChannelId(channel?: any): string | undefined {
+    if (!channel) return undefined;
+    if (typeof channel.isThread === 'function' && !channel.isThread()) return undefined;
+    return channel.parentId || channel.parent?.id;
   }
 
   private extractAttachments(attachments: any): DiscordAttachment[] {

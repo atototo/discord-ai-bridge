@@ -14,6 +14,7 @@ export interface CodexAppServerClientLike {
 
 export interface CodexAppServerSendMessageParams {
   projectName: string;
+  sessionKey?: string;
   projectPath: string;
   channelId: string;
   content: string;
@@ -75,7 +76,8 @@ export class CodexAppServerSessionManager {
 
   async sendMessage(params: CodexAppServerSendMessageParams): Promise<void> {
     await this.ensureStarted();
-    const existingThread = this.threads.get(params.projectName);
+    const key = this.threadKey(params);
+    const existingThread = this.threads.get(key);
     const thread = await this.ensureThread(params);
     thread.channelId = params.channelId;
     thread.discord = params.discord;
@@ -109,7 +111,8 @@ export class CodexAppServerSessionManager {
   }
 
   private async ensureThread(params: CodexAppServerSendMessageParams): Promise<ThreadState> {
-    const existing = this.threads.get(params.projectName);
+    const key = this.threadKey(params);
+    const existing = this.threads.get(key);
     if (existing) return existing;
 
     const response = await this.client.request('thread/start', {
@@ -131,9 +134,13 @@ export class CodexAppServerSessionManager {
       activeTurns: new Map<string, TurnState>(),
       notifiedItems: new Set<string>(),
     };
-    this.threads.set(params.projectName, thread);
-    this.threadProjectNames.set(threadId, params.projectName);
+    this.threads.set(key, thread);
+    this.threadProjectNames.set(threadId, key);
     return thread;
+  }
+
+  private threadKey(params: CodexAppServerSendMessageParams): string {
+    return params.sessionKey || params.projectName;
   }
 
   private buildUserInput(
