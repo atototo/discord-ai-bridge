@@ -17,6 +17,7 @@ import {
 import type { AgentMessage, DiscordRecentMessage } from '../types/index.js';
 import type { DiscordAttachment, DiscordMessageMeta } from '../types/index.js';
 import { agentRegistry as defaultAgentRegistry, type AgentConfig, type AgentRegistry } from '../agents/index.js';
+import { splitForDiscord } from '../capture/parser.js';
 
 type MessageCallback = (
   agentType: string,
@@ -96,6 +97,7 @@ export class DiscordClient {
 
       // Only process text channels
       if (!message.channel.isTextBased()) return;
+      if (!this.isUserMessageType(message)) return;
       if (this.isParentThreadStarterMessage(message)) return;
 
       const channelInfo = this.resolveChannelInfo(message.channelId, message.channel);
@@ -206,6 +208,12 @@ export class DiscordClient {
       return false;
     }
     return !!(message.hasThread || message.thread);
+  }
+
+  private isUserMessageType(message: any): boolean {
+    return message.type === undefined ||
+      message.type === 0 ||
+      message.type === 19;
   }
 
   private async becomesThreadStarterMessage(message: any): Promise<boolean> {
@@ -699,7 +707,12 @@ export class DiscordClient {
         console.warn(`Channel ${channelId} is not a text channel`);
         return;
       }
-      await (channel as TextChannel).send({ content, files });
+      const chunks = splitForDiscord(content || '첨부 파일');
+      const textChunks = chunks.slice(0, -1);
+      for (const chunk of textChunks) {
+        await (channel as TextChannel).send(chunk);
+      }
+      await (channel as TextChannel).send({ content: chunks[chunks.length - 1], files });
     } catch (error) {
       console.error(`Failed to send files to channel ${channelId}:`, error);
     }

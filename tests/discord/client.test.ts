@@ -344,6 +344,35 @@ describe('DiscordClient', () => {
       }
     });
 
+    it('ignores Discord system messages that announce thread creation in the parent channel', async () => {
+      const client = new DiscordClient('test-token', undefined, ['allowed-user']);
+      const callback = vi.fn();
+      client.onMessage(callback);
+      client.registerChannelMappings([
+        { channelId: 'parent-ch', projectName: 'repo', agentType: 'codex' },
+      ]);
+
+      const mockClient = getMockClient();
+      const messageCreateHandler = mockClient.on.mock.calls.find(
+        (call: any[]) => call[0] === 'messageCreate'
+      )?.[1];
+
+      await messageCreateHandler({
+        id: 'thread-created-system-msg',
+        type: 18,
+        author: { bot: false, id: 'allowed-user' },
+        channel: {
+          isTextBased: () => true,
+          isThread: () => false,
+        },
+        channelId: 'parent-ch',
+        content: 'UI/UX & Human-AI Interaction - Agentic Design',
+        attachments: new Map(),
+      });
+
+      expect(callback).not.toHaveBeenCalled();
+    });
+
     it('routes thread messages through the parent channel mapping but replies to the thread channel', async () => {
       const client = new DiscordClient('test-token', undefined, ['allowed-user']);
       const callback = vi.fn();
@@ -685,6 +714,27 @@ describe('DiscordClient', () => {
       expect(mockChannel.send).toHaveBeenCalledWith({
         content: 'files ready',
         files: ['/tmp/result.txt'],
+      });
+    });
+
+    it('splits long file attachment messages before sending files', async () => {
+      const client = new DiscordClient('test-token');
+
+      const mockChannel = {
+        isTextBased: () => true,
+        send: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const mockClient = getMockClient();
+      mockClient.channels.fetch.mockResolvedValue(mockChannel);
+
+      await client.sendFilesToChannel('ch-123', 'x'.repeat(2500), ['/tmp/result.png']);
+
+      expect(mockChannel.send).toHaveBeenCalledTimes(2);
+      expect(mockChannel.send.mock.calls[0][0]).toHaveLength(1900);
+      expect(mockChannel.send.mock.calls[1][0]).toEqual({
+        content: 'x'.repeat(600),
+        files: ['/tmp/result.png'],
       });
     });
 

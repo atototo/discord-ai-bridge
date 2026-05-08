@@ -36,9 +36,25 @@ export function splitForDiscord(text: string, maxLen: number = 1900): string[] {
   let current = '';
 
   for (const line of lines) {
+    if (line.length > maxLen) {
+      if (current) {
+        chunks.push(current);
+        current = '';
+      }
+      for (let i = 0; i < line.length; i += maxLen) {
+        const part = line.slice(i, i + maxLen);
+        if (part.length === maxLen) {
+          chunks.push(part);
+        } else {
+          current = part;
+        }
+      }
+      continue;
+    }
+
     if (current.length + line.length + 1 > maxLen) {
       if (current) chunks.push(current);
-      current = line.length > maxLen ? line.substring(0, maxLen) : line;
+      current = line;
     } else {
       current += (current ? '\n' : '') + line;
     }

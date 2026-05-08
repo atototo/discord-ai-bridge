@@ -97,10 +97,10 @@ describe('splitForDiscord', () => {
     });
   });
 
-  it('truncates single long line exceeding maxLen', () => {
+  it('splits single long line exceeding maxLen without dropping content', () => {
     const longLine = 'x'.repeat(2500);
     const result = splitForDiscord(longLine, 1900);
-    expect(result.length).toBeGreaterThan(0);
+    expect(result.join('')).toBe(longLine);
     result.forEach(chunk => {
       expect(chunk.length).toBeLessThanOrEqual(1900);
     });

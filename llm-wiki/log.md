@@ -253,3 +253,11 @@
 - parent channel의 사용자 메시지는 750ms 뒤 한 번 재조회해 `hasThread` 또는 `thread`가 생겼으면 thread starter로 보고 bridge 입력에서 제외하도록 했다.
 - 실제 thread channel 안의 메시지는 기존처럼 parent channel mapping으로 프로젝트를 찾고, 응답/진행상태/승인요청은 thread 안으로만 보낸다.
 - 검증: `npm run typecheck`, `npm test -- --run`(17 files, 189 tests), `npm run build` 통과.
+
+## [2026-05-08] fix | Discord thread 생성 시스템 메시지 무시와 긴 첨부 메시지 분할
+
+- Discord에서 thread를 만들 때 parent channel에 올라오는 `ThreadCreated` 시스템 메시지가 일반 사용자 입력처럼 처리되어 `Codex - 받은 메시지`가 parent channel에 뜨는 문제가 있었다.
+- bridge 입력은 일반 메시지(`Default`)와 답글(`Reply`) type만 받도록 제한해 thread 생성 안내 같은 시스템 message type을 무시한다.
+- Discord 파일 첨부 전송 시 본문이 길면 `Invalid message: empty, too long...`가 날 수 있어, 파일 첨부 메시지도 1900자 단위로 분할하고 마지막 chunk에 파일을 붙이도록 했다.
+- 기존 `splitForDiscord()`가 긴 단일 라인을 truncate하던 동작도 전체 내용을 보존해 나누도록 수정했다.
+- 검증: `npm run typecheck`, `npm test -- --run`(17 files, 191 tests), `npm run build` 통과.
