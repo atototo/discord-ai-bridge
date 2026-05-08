@@ -246,3 +246,10 @@
 - app-server `commandExecution` started 이벤트 중 `sed`, `cat`, `ls`, `pwd`, `rg --files`, `rg -n`, `find`, `wc`, `nl`, `printenv`, `env` 같은 read-only 탐색성 명령은 Discord progress로 표시하지 않도록 했다.
 - 빌드/테스트/설치처럼 의미 있는 명령과 approval request는 계속 Discord에 표시한다.
 - 검증: `npm run typecheck`, `npm test -- --run`(17 files, 188 tests), `npm run build` 통과.
+
+## [2026-05-08] fix | Discord thread starter 지연 감지 보강
+
+- Discord가 parent channel `messageCreate` 이벤트를 먼저 보내고, 짧은 시간 뒤 같은 메시지에 thread metadata를 붙이는 경우 parent channel과 thread 양쪽에서 `Codex - 받은 메시지`가 중복 표시될 수 있었다.
+- parent channel의 사용자 메시지는 750ms 뒤 한 번 재조회해 `hasThread` 또는 `thread`가 생겼으면 thread starter로 보고 bridge 입력에서 제외하도록 했다.
+- 실제 thread channel 안의 메시지는 기존처럼 parent channel mapping으로 프로젝트를 찾고, 응답/진행상태/승인요청은 thread 안으로만 보낸다.
+- 검증: `npm run typecheck`, `npm test -- --run`(17 files, 189 tests), `npm run build` 통과.

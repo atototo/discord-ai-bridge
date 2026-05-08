@@ -101,6 +101,7 @@ export class DiscordClient {
       const channelInfo = this.resolveChannelInfo(message.channelId, message.channel);
       if (channelInfo && this.messageCallback) {
         if (!this.isUserAllowed(message.author.id)) return;
+        if (await this.becomesThreadStarterMessage(message)) return;
         if (await this.handleTextNewSessionCommand(message, channelInfo)) return;
         await this.messageCallback(
           channelInfo.agentType,
@@ -205,6 +206,21 @@ export class DiscordClient {
       return false;
     }
     return !!(message.hasThread || message.thread);
+  }
+
+  private async becomesThreadStarterMessage(message: any): Promise<boolean> {
+    if (typeof message.channel?.isThread === 'function' && message.channel.isThread()) {
+      return false;
+    }
+    if (!message.channel?.messages?.fetch) return false;
+
+    await new Promise((resolve) => setTimeout(resolve, 750));
+    try {
+      const refreshed = await message.channel.messages.fetch(message.id);
+      return this.isParentThreadStarterMessage(refreshed);
+    } catch {
+      return false;
+    }
   }
 
   private extractAttachments(attachments: any): DiscordAttachment[] {

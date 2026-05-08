@@ -300,6 +300,50 @@ describe('DiscordClient', () => {
       expect(callback).not.toHaveBeenCalled();
     });
 
+    it('waits briefly and ignores parent messages that become thread starters after creation', async () => {
+      vi.useFakeTimers();
+      const client = new DiscordClient('test-token', undefined, ['allowed-user']);
+      const callback = vi.fn();
+      client.onMessage(callback);
+      client.registerChannelMappings([
+        { channelId: 'parent-ch', projectName: 'repo', agentType: 'codex' },
+      ]);
+
+      const mockClient = getMockClient();
+      const messageCreateHandler = mockClient.on.mock.calls.find(
+        (call: any[]) => call[0] === 'messageCreate'
+      )?.[1];
+
+      const pending = messageCreateHandler({
+        id: 'starter-msg-2',
+        author: { bot: false, id: 'allowed-user' },
+        channel: {
+          isTextBased: () => true,
+          isThread: () => false,
+          messages: {
+            fetch: vi.fn().mockResolvedValue({
+              id: 'starter-msg-2',
+              hasThread: true,
+              thread: { id: 'thread-ch' },
+            }),
+          },
+        },
+        channelId: 'parent-ch',
+        content: '곧 스레드가 붙을 메시지',
+        attachments: new Map(),
+        hasThread: false,
+      });
+
+      try {
+        await vi.advanceTimersByTimeAsync(750);
+        await pending;
+
+        expect(callback).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('routes thread messages through the parent channel mapping but replies to the thread channel', async () => {
       const client = new DiscordClient('test-token', undefined, ['allowed-user']);
       const callback = vi.fn();
