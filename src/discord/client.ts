@@ -700,6 +700,19 @@ export class DiscordClient {
     }
   }
 
+  async sendTyping(channelId: string): Promise<void> {
+    try {
+      const channel = await this.client.channels.fetch(channelId);
+      if (!channel?.isTextBased()) {
+        console.warn(`Channel ${channelId} is not a text channel`);
+        return;
+      }
+      await (channel as TextChannel).sendTyping();
+    } catch (error) {
+      console.error(`Failed to send typing indicator to channel ${channelId}:`, error);
+    }
+  }
+
   async sendFilesToChannel(channelId: string, content: string, files: string[]): Promise<void> {
     try {
       const channel = await this.client.channels.fetch(channelId);

@@ -33,6 +33,7 @@ export interface CodexAppServerSendMessageParams {
       toolInput: any,
       timeoutMs?: number
     ): Promise<boolean>;
+    sendTyping?(channelId: string): Promise<void>;
   };
 }
 
@@ -285,64 +286,7 @@ export class CodexAppServerSessionManager {
 
   private async sendItemProgress(thread: ThreadState, item: any): Promise<void> {
     if (!item?.id || thread.notifiedItems.has(item.id)) return;
-    const message = this.formatItemProgress(item);
-    if (!message) return;
     thread.notifiedItems.add(item.id);
-    await thread.discord.sendToChannel(thread.channelId, message);
-  }
-
-  private formatItemProgress(item: any): string | null {
-    switch (item.type) {
-      case 'webSearch':
-        return `🔎 웹 검색 중: \`${this.truncateInline(item.query || '')}\``;
-      case 'commandExecution':
-        if (this.isNoisyReadOnlyCommand(item.command || '')) return null;
-        return `🔧 명령 실행 중: \`${this.truncateInline(item.command || '')}\``;
-      case 'fileChange':
-        return '📝 파일 변경 준비 중...';
-      case 'mcpToolCall':
-        return `🧩 MCP 도구 사용 중: \`${this.truncateInline(`${item.server || 'mcp'}:${item.tool || 'tool'}`)}\``;
-      case 'dynamicToolCall':
-        return `🧰 도구 사용 중: \`${this.truncateInline(`${item.namespace ? `${item.namespace}.` : ''}${item.tool || 'tool'}`)}\``;
-      case 'imageView':
-        return `🖼️ 이미지 확인 중: \`${this.truncateInline(item.path || '')}\``;
-      case 'imageGeneration':
-        return '🎨 이미지 생성 중...';
-      default:
-        return null;
-    }
-  }
-
-  private truncateInline(text: string): string {
-    const normalized = text.replace(/\s+/g, ' ').trim();
-    return normalized.length > 120 ? `${normalized.slice(0, 117)}...` : normalized;
-  }
-
-  private isNoisyReadOnlyCommand(command: string): boolean {
-    const inner = this.unwrapShellCommand(command);
-    return [
-      /^sed\s+-n\b/,
-      /^cat\b/,
-      /^ls(\s|$)/,
-      /^pwd(\s|$)/,
-      /^rg\s+--files\b/,
-      /^rg\s+-n\b/,
-      /^find\s+/,
-      /^wc\s+/,
-      /^nl\s+/,
-      /^printenv\b/,
-      /^env\s*$/,
-    ].some((pattern) => pattern.test(inner));
-  }
-
-  private unwrapShellCommand(command: string): string {
-    const normalized = command.replace(/\s+/g, ' ').trim();
-    const shellMatch = normalized.match(/^\/bin\/(?:zsh|bash|sh)\s+-lc\s+(['"])(.*)\1$/);
-    if (shellMatch) return shellMatch[2].trim();
-    const unquotedShellMatch = normalized.match(/^\/bin\/(?:zsh|bash|sh)\s+-lc\s+(.+)$/);
-    if (unquotedShellMatch) return unquotedShellMatch[1].trim();
-    const envShellMatch = normalized.match(/^env\s+[^;]+?\s+\/bin\/(?:zsh|bash|sh)\s+-lc\s+(['"])(.*)\1$/);
-    if (envShellMatch) return envShellMatch[2].trim();
-    return normalized;
+    await thread.discord.sendTyping?.(thread.channelId);
   }
 }

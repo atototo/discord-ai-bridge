@@ -48,6 +48,7 @@ function createDiscord() {
     sendToChannel: vi.fn().mockResolvedValue(undefined),
     sendFilesToChannel: vi.fn().mockResolvedValue(undefined),
     sendApprovalRequest: vi.fn().mockResolvedValue(true),
+    sendTyping: vi.fn().mockResolvedValue(undefined),
   } as any;
 }
 
@@ -300,7 +301,7 @@ describe('CodexAppServerSessionManager', () => {
     expect(discord.sendToChannel.mock.calls[0][1]).not.toContain('부분 답변');
   });
 
-  it('sends tool progress notifications for app-server item events', async () => {
+  it('uses Discord typing indicators instead of progress messages for app-server item events', async () => {
     const client = new FakeClient();
     const discord = createDiscord();
     const manager = new CodexAppServerSessionManager(client);
@@ -331,17 +332,12 @@ describe('CodexAppServerSessionManager', () => {
       },
     });
 
-    expect(discord.sendToChannel).toHaveBeenCalledWith(
-      'channel-1',
-      expect.stringContaining('웹 검색')
-    );
-    expect(discord.sendToChannel).toHaveBeenCalledWith(
-      'channel-1',
-      expect.stringContaining('npm test')
-    );
+    expect(discord.sendToChannel).not.toHaveBeenCalled();
+    expect(discord.sendTyping).toHaveBeenCalledTimes(2);
+    expect(discord.sendTyping).toHaveBeenCalledWith('channel-1');
   });
 
-  it('suppresses noisy read-only command progress notifications', async () => {
+  it('uses typing indicators for noisy read-only command progress notifications', async () => {
     const client = new FakeClient();
     const discord = createDiscord();
     const manager = new CodexAppServerSessionManager(client);
@@ -372,9 +368,10 @@ describe('CodexAppServerSessionManager', () => {
     }
 
     expect(discord.sendToChannel).not.toHaveBeenCalled();
+    expect(discord.sendTyping).toHaveBeenCalledTimes(4);
   });
 
-  it('keeps meaningful command progress notifications', async () => {
+  it('uses typing indicators for meaningful command progress notifications', async () => {
     const client = new FakeClient();
     const discord = createDiscord();
     const manager = new CodexAppServerSessionManager(client);
@@ -397,10 +394,8 @@ describe('CodexAppServerSessionManager', () => {
       },
     });
 
-    expect(discord.sendToChannel).toHaveBeenCalledWith(
-      'channel-1',
-      expect.stringContaining('npm run build')
-    );
+    expect(discord.sendToChannel).not.toHaveBeenCalled();
+    expect(discord.sendTyping).toHaveBeenCalledWith('channel-1');
   });
 
   it('converts app-server approval requests into Discord approvals', async () => {

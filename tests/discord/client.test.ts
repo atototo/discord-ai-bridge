@@ -717,6 +717,23 @@ describe('DiscordClient', () => {
       });
     });
 
+    it('sendTyping fetches channel and sends a typing indicator', async () => {
+      const client = new DiscordClient('test-token');
+
+      const mockChannel = {
+        isTextBased: () => true,
+        sendTyping: vi.fn().mockResolvedValue(undefined),
+      };
+
+      const mockClient = getMockClient();
+      mockClient.channels.fetch.mockResolvedValue(mockChannel);
+
+      await client.sendTyping('ch-123');
+
+      expect(mockClient.channels.fetch).toHaveBeenCalledWith('ch-123');
+      expect(mockChannel.sendTyping).toHaveBeenCalled();
+    });
+
     it('splits long file attachment messages before sending files', async () => {
       const client = new DiscordClient('test-token');
 

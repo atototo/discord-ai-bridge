@@ -261,3 +261,10 @@
 - Discord 파일 첨부 전송 시 본문이 길면 `Invalid message: empty, too long...`가 날 수 있어, 파일 첨부 메시지도 1900자 단위로 분할하고 마지막 chunk에 파일을 붙이도록 했다.
 - 기존 `splitForDiscord()`가 긴 단일 라인을 truncate하던 동작도 전체 내용을 보존해 나누도록 수정했다.
 - 검증: `npm run typecheck`, `npm test -- --run`(17 files, 191 tests), `npm run build` 통과.
+
+## [2026-05-08] fix | Discord app-server progress를 typing indicator로 대체
+
+- app-server `item/started` 이벤트가 command/web/tool 진행 상태를 Discord 메시지로 계속 쌓아 채팅이 길어지는 문제가 있었다.
+- 진행 상태 메시지는 보내지 않고 Discord `sendTyping()`만 호출하도록 바꿨다.
+- 승인 요청은 사용자 결정이 필요한 이벤트라 기존처럼 별도 승인 카드로 계속 표시한다.
+- 검증: `npm run typecheck`, `npm test -- --run`(17 files, 192 tests), `npm run build` 통과.
