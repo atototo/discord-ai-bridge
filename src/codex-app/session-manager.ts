@@ -91,6 +91,13 @@ export class CodexAppServerSessionManager {
     });
   }
 
+  resetThread(projectName: string): void {
+    const existing = this.threads.get(projectName);
+    if (!existing) return;
+    this.threads.delete(projectName);
+    this.threadProjectNames.delete(existing.threadId);
+  }
+
   stop(): void {
     this.client.stop();
   }

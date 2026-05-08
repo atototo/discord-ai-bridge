@@ -1,6 +1,6 @@
 # 현재 상태
 
-날짜: 2026-05-07
+날짜: 2026-05-08
 
 ## 작업공간
 
@@ -47,6 +47,11 @@
 - 프로젝트/채널 매핑은 state의 `projectName -> projectPath -> discordChannels` 기준이다. 한 Discord 채널은 저장된 프로젝트 경로의 Codex thread로 계속 라우팅되며, 다른 로컬 경로는 별도 project/channel로 등록하는 모델이다.
 - Discord 채널 생성 시 프로젝트명 category를 만들거나 재사용하고, 해당 프로젝트의 agent 채널을 category 아래에 둔다.
 - 로컬 사용은 npm publish 없이 source install + `npm link`를 기본으로 한다. `agent-discord-codex`는 현재 디렉터리에서 app-server daemon을 재시작하고 `go codex --no-attach`를 실행하며, `agent-discord-down`은 daemon stop 별칭이다.
+- 사용자가 로컬 터미널에서 `npm link`, `agent-discord-down`, `agent-discord-codex` 실행을 확인했다.
+- 실제 Discord smoke test에서 daemon 재시작 후 새 Codex app-server thread가 같은 채널의 최근 대화 맥락을 참고해 답하는 것을 확인했다.
+- README/README.ko/docs 한국어 README에는 이 repo가 `DoBuDevel/discord-agent-bridge` 기반으로 가져와 `atototo/discord-ai-bridge`로 커스텀한 source-install repo라는 설명을 반영했다.
+- Discord slash command `/new-session`을 추가했다. 기본값은 현재 Discord 채널/프로젝트 매핑은 유지하고 Codex app-server thread만 새로 시작하며, 다음 메시지에는 이전 Discord 맥락을 붙이지 않는다.
+- `/new-session`의 선택 옵션 `with-context`를 true로 주면 새 Codex app-server thread를 만들되 다음 첫 메시지에 최근 Discord 채널 대화 맥락을 붙인다. slash command가 보이지 않을 때를 위한 텍스트 fallback `!new-session`, `!new-session with-context`도 지원한다.
 - Discord voice message는 `.ogg`/Opus 첨부로 정상 다운로드되고 Codex에 파일 경로로 전달된다.
 - Codex app-server realtime audio protocol probe 결과, `thread/realtime/*` methods는 `--experimental` 타입에 존재하지만 `realtime_conversation` feature enable이 필요하고 현재 ChatGPT auth app-server 세션에서는 `realtime conversation requires API key auth`로 실패한다.
 
@@ -55,16 +60,14 @@
 - `DoBuDevel/discord-agent-bridge`는 MIT license로 확인했고, `src/agents/`에 adapter를 추가하는 구조다.
 - 기존 Claude/OpenCode 흐름은 유지하면서 Codex adapter를 추가하는 MVP를 구현했다.
 - Discord allowlist와 tmux target escaping을 1차 반영했다.
-- 다음 세부 목표는 실제 Discord에서 Codex app-server transport smoke test, 이미지/파일 양방향 첨부 smoke test, 승인 요청 왕복 smoke test, 음성 첨부 UX 결정이다.
+- 다음 세부 목표는 GitHub push 후 필요 시 실제 다른 프로젝트에서 Codex app-server transport, 이미지/파일 양방향 첨부, 승인 요청 왕복, `/new-session` slash command 표시/동작을 반복 smoke test하고 음성 첨부 UX를 나중에 결정하는 것이다.
 
 ## 다음 작업
 
-1. 실제 Discord bot token과 허용 사용자 ID를 로컬 환경변수로 설정해 smoke test를 준비한다.
-2. 새 빌드가 적용되도록 daemon을 재시작하고 `CODEX_TRANSPORT=app-server agent-discord go codex`로 Discord smoke test를 실행한다.
-3. Discord에 이미지/파일을 올려 app-server transport에서 Codex가 `localImage`/로컬 경로를 처리하고, 결과 파일이 명시 마커 또는 본문 이미지 경로 감지로 Discord에 업로드되는지 확인한다.
-4. 명령 실행/파일 변경/권한 승인 요청이 Discord approval UX로 올라오고 승인/거절 decision이 Codex app-server로 돌아가는지 smoke test한다.
-5. 프로젝트 category 생성/재사용이 실제 Discord 서버 권한과 UI에서 기대대로 동작하는지 확인한다.
-6. Discord voice message를 API key auth 기반 realtime audio로 처리할지, 아니면 로컬 도구 승인 기반 파일 처리 UX로 유지할지 결정한다.
+1. 현재 변경사항을 커밋하고 `origin/main`에 push한다.
+2. daemon 재시작 후 Discord slash UI에서 `/new-session`과 `with-context` 옵션 설명이 보이는지 실제 서버에서 확인한다.
+3. 다른 로컬 프로젝트 경로에서 `agent-discord-codex`로 새 channel/category 생성 또는 재사용 흐름을 다시 확인한다.
+4. Discord voice message를 API key auth 기반 realtime audio로 처리할지, 아니면 로컬 도구 승인 기반 파일 처리 UX로 유지할지 나중에 결정한다.
 
 ## 열린 질문 / 블로커
 

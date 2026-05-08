@@ -23,8 +23,10 @@ vi.mock('discord.js', () => {
         mockClientInstances.push(this);
       }
     },
+    ApplicationCommandOptionType: { Boolean: 5 },
     GatewayIntentBits: { Guilds: 1, GuildMessages: 2, MessageContent: 4, GuildMessageReactions: 8 },
     ChannelType: { GuildText: 0, GuildCategory: 4 },
+    Events: { InteractionCreate: 'interactionCreate' },
     ButtonBuilder: class MockButtonBuilder {
       setCustomId = vi.fn().mockReturnThis();
       setLabel = vi.fn().mockReturnThis();
@@ -269,6 +271,92 @@ describe('DiscordClient', () => {
         { authorName: 'atoto0311', authorBot: false, content: '이전 질문', attachments: [] },
         { authorName: 'codex-in-company', authorBot: true, content: '이전 답변', attachments: ['result.png'] },
       ]);
+    });
+
+    it('handles text fallback new-session command without forwarding it as a normal message', async () => {
+      const client = new DiscordClient('test-token', undefined, ['allowed-user']);
+      const messageCallback = vi.fn();
+      const sessionCallback = vi.fn();
+      client.onMessage(messageCallback);
+      client.onNewSession(sessionCallback);
+      client.registerChannelMappings([
+        { channelId: 'ch-1', projectName: 'repo', agentType: 'codex' },
+      ]);
+
+      const mockClient = getMockClient();
+      const messageCreateHandler = mockClient.on.mock.calls.find(
+        (call: any[]) => call[0] === 'messageCreate'
+      )?.[1];
+
+      await messageCreateHandler({
+        id: 'msg-3',
+        author: { bot: false, id: 'allowed-user' },
+        channel: { isTextBased: () => true, send: vi.fn().mockResolvedValue(undefined) },
+        channelId: 'ch-1',
+        content: '!new-session with-context',
+        attachments: new Map(),
+      });
+
+      expect(sessionCallback).toHaveBeenCalledWith({
+        channelId: 'ch-1',
+        projectName: 'repo',
+        agentType: 'codex',
+        withContext: true,
+      });
+      expect(messageCallback).not.toHaveBeenCalled();
+    });
+
+    it('registers and handles the new-session slash command', async () => {
+      const client = new DiscordClient('test-token', undefined, ['allowed-user']);
+      const sessionCallback = vi.fn();
+      client.onNewSession(sessionCallback);
+      client.registerChannelMappings([
+        { channelId: 'ch-1', projectName: 'repo', agentType: 'codex' },
+      ]);
+
+      const mockGuild = {
+        channels: { cache: new Map() },
+        commands: { set: vi.fn().mockResolvedValue(undefined) },
+      };
+      const mockClient = getMockClient();
+      mockClient.guilds.cache = new Map([['guild-1', mockGuild]]);
+
+      const readyHandler = mockClient.on.mock.calls.find(
+        (call: any[]) => call[0] === 'clientReady'
+      )?.[1];
+      await readyHandler();
+
+      expect(mockGuild.commands.set).toHaveBeenCalledWith([
+        expect.objectContaining({
+          name: 'new-session',
+          description: expect.stringContaining('새 Codex 세션'),
+          options: [
+            expect.objectContaining({
+              name: 'with-context',
+              description: expect.stringContaining('최근 Discord 대화'),
+            }),
+          ],
+        }),
+      ]);
+
+      const interactionHandler = mockClient.on.mock.calls.find(
+        (call: any[]) => call[0] === 'interactionCreate'
+      )?.[1];
+      await interactionHandler({
+        isChatInputCommand: () => true,
+        commandName: 'new-session',
+        channelId: 'ch-1',
+        user: { id: 'allowed-user', bot: false },
+        options: { getBoolean: vi.fn().mockReturnValue(true) },
+        reply: vi.fn().mockResolvedValue(undefined),
+      });
+
+      expect(sessionCallback).toHaveBeenCalledWith({
+        channelId: 'ch-1',
+        projectName: 'repo',
+        agentType: 'codex',
+        withContext: true,
+      });
     });
   });
 

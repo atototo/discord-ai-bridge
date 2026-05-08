@@ -212,3 +212,19 @@
 - Discord history fetch는 현재 메시지 이전 메시지만 대상으로 하고, bridge의 수신 확인/진행 상태 같은 noise 메시지는 제외한다.
 - 기본 최근 메시지 수는 12개이며 `DISCORD_CONTEXT_MESSAGES=0`으로 비활성화할 수 있다.
 - 검증: bundled Node 실행 기준 `tsc --noEmit`, `vitest run`(17 files, 174 tests), `tsup build` 통과.
+
+## [2026-05-08] docs | 문서 attribution과 source install 설명 보강
+
+- 사용자가 `npm link`, `agent-discord-down`, `agent-discord-codex`를 로컬 터미널에서 실행해 편의 명령이 동작함을 확인했다.
+- 실제 Discord smoke test에서 daemon 재시작 후 새 Codex app-server thread가 같은 채널의 최근 대화 맥락을 참고해 답하는 것을 확인했다.
+- 루트 README와 한국어 README에 이어 `docs/README.ko.md`도 `DoBuDevel/discord-agent-bridge` 기반 커스텀 repo라는 설명, source install + `npm link`, `agent-discord-codex`/`agent-discord-down`, Discord 최근 대화 맥락 설명에 맞춰 정리했다.
+- 변경은 문서 보강만 포함한다.
+
+## [2026-05-08] feature | Discord slash command로 Codex 새 세션 시작
+
+- Codex app-server transport에서 현재 Discord 채널/프로젝트 매핑은 유지한 채 Codex thread만 새로 시작하는 `/new-session` slash command를 추가했다.
+- 기본 `/new-session`은 다음 첫 메시지에 이전 Discord 맥락을 붙이지 않는 완전 새 세션으로 동작한다.
+- `/new-session`의 `with-context` 옵션을 true로 주면 새 thread를 만들되 다음 첫 메시지에 최근 Discord 채널 대화 맥락을 참고로 붙인다.
+- slash command가 아직 보이지 않는 환경을 위해 `!new-session`, `!new-session with-context` 텍스트 fallback도 추가했다.
+- README/README.ko/docs 한국어 README에 command 설명, Discord UI 설명, `applications.commands` scope 필요성을 정리했다.
+- 검증: `npm run typecheck`, `npm test -- --run`(17 files, 179 tests), `npm run build` 통과.

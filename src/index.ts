@@ -35,6 +35,7 @@ export class AgentBridge {
   private registry: AgentRegistry;
   private bridgeConfig: BridgeConfig;
   private codexAppServer?: CodexAppServerSessionManagerType;
+  private nextCodexSessionWithContext = new Map<string, boolean>();
 
   constructor(deps?: AgentBridgeDeps) {
     this.bridgeConfig = deps?.config || defaultConfig;
@@ -107,6 +108,10 @@ export class AgentBridge {
       this.discord.registerChannelMappings(mappings);
     }
 
+    this.discord.onNewSession(async (request) => {
+      await this.handleNewSessionRequest(request);
+    });
+
     // Set up message routing (Discord → Agent via tmux)
     this.discord.onMessage(async (agentType, content, projectName, channelId, meta) => {
       console.log(`📨 [${projectName}/${agentType}] ${content.substring(0, 50)}...`);
@@ -144,7 +149,9 @@ export class AgentBridge {
           await this.discord.sendToChannel(channelId, '⚠️ Codex app-server transport is not initialized');
           return;
         }
-        const recentMessages = await this.loadRecentDiscordContext(channelId, meta.messageId);
+        const recentMessages = await this.shouldLoadRecentDiscordContext(projectName)
+          ? await this.loadRecentDiscordContext(channelId, meta.messageId)
+          : [];
         await this.codexAppServer.sendMessage({
           projectName,
           projectPath: project.projectPath,
@@ -170,6 +177,36 @@ export class AgentBridge {
     console.log('✅ Discord Agent Bridge is running');
     console.log(`📡 Server listening on port ${this.bridgeConfig.hookServerPort || 18470}`);
     console.log(`🤖 Registered agents: ${this.registry.getAll().map(a => a.config.displayName).join(', ')}`);
+  }
+
+  private async handleNewSessionRequest(request: {
+    channelId: string;
+    projectName: string;
+    agentType: string;
+    withContext: boolean;
+  }): Promise<void> {
+    if (request.agentType !== 'codex' || this.bridgeConfig.codexTransport !== 'app-server') {
+      await this.discord.sendToChannel(
+        request.channelId,
+        '⚠️ 새 세션 전환은 Codex app-server 채널에서만 지원됩니다.'
+      );
+      return;
+    }
+
+    if (!this.codexAppServer) {
+      await this.discord.sendToChannel(request.channelId, '⚠️ Codex app-server transport is not initialized');
+      return;
+    }
+
+    this.codexAppServer.resetThread(request.projectName);
+    this.nextCodexSessionWithContext.set(request.projectName, request.withContext);
+  }
+
+  private shouldLoadRecentDiscordContext(projectName: string): boolean {
+    if (!this.nextCodexSessionWithContext.has(projectName)) return true;
+    const shouldLoad = this.nextCodexSessionWithContext.get(projectName) ?? false;
+    this.nextCodexSessionWithContext.delete(projectName);
+    return shouldLoad;
   }
 
   private async loadRecentDiscordContext(channelId: string, beforeMessageId: string) {

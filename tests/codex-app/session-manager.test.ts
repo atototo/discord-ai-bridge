@@ -131,6 +131,39 @@ describe('CodexAppServerSessionManager', () => {
     expect(turns[1].params.input[0].text).not.toContain('[Discord 최근 대화 맥락]');
   });
 
+  it('starts a new thread for a project after resetThread', async () => {
+    const client = new FakeClient();
+    const manager = new CodexAppServerSessionManager(client);
+
+    await manager.sendMessage({
+      projectName: 'repo',
+      projectPath: '/repo',
+      channelId: 'channel-1',
+      content: '첫 메시지',
+      attachments: [],
+      discord: createDiscord(),
+    });
+
+    manager.resetThread('repo');
+
+    await manager.sendMessage({
+      projectName: 'repo',
+      projectPath: '/repo',
+      channelId: 'channel-1',
+      content: '새 세션 메시지',
+      attachments: [],
+      recentMessages: [
+        { authorName: 'atoto0311', authorBot: false, content: '참고할 이전 대화', attachments: [] },
+      ],
+      discord: createDiscord(),
+    });
+
+    expect(client.requests.filter((request) => request.method === 'thread/start')).toHaveLength(2);
+    const turns = client.requests.filter((request) => request.method === 'turn/start');
+    expect(turns[1].params.input[0].text).toContain('[Discord 최근 대화 맥락]');
+    expect(turns[1].params.input[0].text).toContain('참고할 이전 대화');
+  });
+
   it('streams agent deltas to Discord only when the turn completes', async () => {
     const client = new FakeClient();
     const discord = createDiscord();

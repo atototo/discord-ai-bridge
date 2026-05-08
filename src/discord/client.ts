@@ -3,6 +3,7 @@
  */
 
 import {
+  ApplicationCommandOptionType,
   Client,
   GatewayIntentBits,
   TextChannel,
@@ -25,10 +26,32 @@ type MessageCallback = (
   meta: DiscordMessageMeta
 ) => void | Promise<void>;
 
+export interface NewSessionRequest {
+  channelId: string;
+  projectName: string;
+  agentType: string;
+  withContext: boolean;
+}
+
+type NewSessionCallback = (request: NewSessionRequest) => void | Promise<void>;
+
 interface ChannelInfo {
   projectName: string;
   agentType: string;
 }
+
+const NEW_SESSION_COMMAND = {
+  name: 'new-session',
+  description: '현재 채널의 새 Codex 세션을 시작합니다',
+  options: [
+    {
+      type: ApplicationCommandOptionType.Boolean,
+      name: 'with-context',
+      description: '다음 첫 메시지에 최근 Discord 대화 맥락을 참고로 붙입니다',
+      required: false,
+    },
+  ],
+};
 
 export class DiscordClient {
   private client: Client;
@@ -36,6 +59,7 @@ export class DiscordClient {
   private allowedUserIds: Set<string>;
   private targetChannel?: TextChannel;
   private messageCallback?: MessageCallback;
+  private newSessionCallback?: NewSessionCallback;
   private channelMapping: Map<string, ChannelInfo> = new Map();
   private registry: AgentRegistry;
 
@@ -56,9 +80,10 @@ export class DiscordClient {
   }
 
   private setupEventHandlers(): void {
-    this.client.on('clientReady', () => {
+    this.client.on('clientReady', async () => {
       console.log(`Discord bot logged in as ${this.client.user?.tag}`);
       this.scanExistingChannels();
+      await this.registerSlashCommands();
     });
 
     this.client.on('error', (error) => {
@@ -75,6 +100,7 @@ export class DiscordClient {
       const channelInfo = this.channelMapping.get(message.channelId);
       if (channelInfo && this.messageCallback) {
         if (!this.isUserAllowed(message.author.id)) return;
+        if (await this.handleTextNewSessionCommand(message, channelInfo)) return;
         await this.messageCallback(
           channelInfo.agentType,
           message.content,
@@ -87,6 +113,76 @@ export class DiscordClient {
         );
       }
     });
+
+    this.client.on('interactionCreate', async (interaction: any) => {
+      await this.handleInteraction(interaction);
+    });
+  }
+
+  private async registerSlashCommands(): Promise<void> {
+    const registrations = [...this.client.guilds.cache.values()].map(async (guild: any) => {
+      if (!guild?.commands?.set) return;
+      await guild.commands.set([NEW_SESSION_COMMAND]);
+    });
+    await Promise.all(registrations);
+  }
+
+  private async handleInteraction(interaction: any): Promise<void> {
+    if (!interaction?.isChatInputCommand?.()) return;
+    if (interaction.commandName !== NEW_SESSION_COMMAND.name) return;
+    if (!this.isUserAllowed(interaction.user?.id)) {
+      await interaction.reply?.({ content: '⚠️ 이 명령을 사용할 권한이 없습니다.', ephemeral: true });
+      return;
+    }
+
+    const channelInfo = this.channelMapping.get(interaction.channelId);
+    if (!channelInfo) {
+      await interaction.reply?.({ content: '⚠️ 이 채널은 bridge 프로젝트 채널로 등록되어 있지 않습니다.', ephemeral: true });
+      return;
+    }
+
+    const withContext = interaction.options?.getBoolean?.('with-context') ?? false;
+    if (!this.newSessionCallback) {
+      await interaction.reply?.({ content: '⚠️ 새 세션 핸들러가 준비되지 않았습니다.', ephemeral: true });
+      return;
+    }
+
+    await this.newSessionCallback({
+      channelId: interaction.channelId,
+      projectName: channelInfo.projectName,
+      agentType: channelInfo.agentType,
+      withContext,
+    });
+    await interaction.reply?.({
+      content: this.newSessionMessage(withContext),
+      ephemeral: false,
+    });
+  }
+
+  private async handleTextNewSessionCommand(message: any, channelInfo: ChannelInfo): Promise<boolean> {
+    const match = message.content.trim().match(/^!new-session(?:\s+(with-context))?$/i);
+    if (!match) return false;
+
+    if (!this.newSessionCallback) {
+      await message.channel.send?.('⚠️ 새 세션 핸들러가 준비되지 않았습니다.');
+      return true;
+    }
+
+    const withContext = !!match[1];
+    await this.newSessionCallback({
+      channelId: message.channelId,
+      projectName: channelInfo.projectName,
+      agentType: channelInfo.agentType,
+      withContext,
+    });
+    await message.channel.send?.(this.newSessionMessage(withContext));
+    return true;
+  }
+
+  private newSessionMessage(withContext: boolean): string {
+    return withContext
+      ? '✅ 새 Codex 세션으로 전환했습니다. 다음 메시지는 최근 Discord 대화 맥락을 참고합니다.'
+      : '✅ 새 Codex 세션으로 전환했습니다. 다음 메시지는 이전 맥락 없이 시작합니다.';
   }
 
   private extractAttachments(attachments: any): DiscordAttachment[] {
@@ -328,6 +424,10 @@ export class DiscordClient {
    */
   onMessage(callback: MessageCallback): void {
     this.messageCallback = callback;
+  }
+
+  onNewSession(callback: NewSessionCallback): void {
+    this.newSessionCallback = callback;
   }
 
   /**

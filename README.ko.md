@@ -7,7 +7,7 @@ English version: [README.md](README.md)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/Tests-171%20passing-brightgreen.svg)](./tests)
+[![Tests](https://img.shields.io/badge/Tests-179%20passing-brightgreen.svg)](./tests)
 
 ## 개요
 
@@ -29,6 +29,7 @@ Discord AI Bridge는 로컬 AI 코딩 어시스턴트를 Discord에 연결합니
 - **프로젝트 격리**: 각 프로젝트가 전용 Discord 채널 보유
 - **단일 데몬**: 하나의 Discord 봇 연결로 모든 프로젝트 관리
 - **세션 관리**: 연결 해제에도 유지되는 지속적인 tmux 세션
+- **Discord 새 세션 명령**: `/new-session`으로 현재 채널의 Codex app-server thread만 새로 시작
 - **YOLO 모드**: 에이전트 자율성을 위한 `--dangerously-skip-permissions` 플래그 옵션
 - **풍부한 CLI**: 설정, 제어, 모니터링을 위한 직관적인 명령어
 - **타입 안전성**: 의존성 주입 패턴을 사용한 TypeScript 작성
@@ -41,6 +42,7 @@ Discord AI Bridge는 로컬 AI 코딩 어시스턴트를 Discord에 연결합니
 - **Discord Bot**: [Discord 봇 설정 가이드](docs/DISCORD_SETUP.ko.md)를 따라 봇 생성
   - 필수 권한: Send Messages, Manage Channels, Read Message History, Embed Links, Add Reactions
   - 필수 인텐트: Guilds, GuildMessages, MessageContent, GuildMessageReactions
+  - 권장 OAuth scope: slash command 등록을 위한 `bot`, `applications.commands`
 - **AI 에이전트**: 다음 중 하나 이상:
   - [Codex CLI](https://developers.openai.com/codex)
   - [Claude Code](https://code.claude.com/docs/en/overview)
@@ -119,6 +121,29 @@ CODEX_TRANSPORT=app-server agent-discord go codex --no-attach
 이 모드에서는 bridge가 `codex app-server --listen stdio://`를 로컬 프로세스로 실행합니다. Discord 메시지는 Codex `turn/start` 요청으로 들어가고, assistant 답변은 turn 완료 시 Discord로 전송되며, 명령/파일/권한 승인 요청은 Discord 승인 reaction으로 라우팅됩니다. 이 모드에는 attach할 Codex tmux UI가 없습니다.
 
 daemon 재시작으로 Codex app-server thread가 새로 만들어질 때는 같은 Discord 채널의 최근 메시지 몇 개를 가져와 첫 turn 앞에 가벼운 맥락으로 붙입니다. Codex 내부 thread를 억지로 복원하지는 않지만, 채널의 직전 대화 흐름을 참고할 수 있습니다. `DISCORD_CONTEXT_MESSAGES=0`이면 끌 수 있고, 숫자를 바꾸면 포함할 최근 메시지 수를 조정할 수 있습니다.
+
+### Discord에서 새 Codex 세션 시작
+
+Codex로 매핑된 Discord 채널에서 slash command를 사용할 수 있습니다.
+
+```text
+/new-session
+```
+
+Discord 채널과 프로젝트 매핑은 그대로 유지하고, 해당 프로젝트의 Codex app-server thread만 새로 만듭니다. 다음 메시지는 이전 맥락 없이 완전 새 Codex 채팅으로 시작합니다.
+
+새 Codex thread를 만들되 첫 메시지에 최근 Discord 채널 대화 몇 개를 참고로 붙이고 싶으면 옵션을 켭니다.
+
+```text
+/new-session with-context: true
+```
+
+Discord slash UI에는 `/new-session` 설명과 `with-context` 옵션 설명이 보이도록 등록됩니다. 명령이 보이지 않으면 봇을 `applications.commands` scope로 다시 초대했는지 확인하고 daemon을 재시작하세요. 텍스트 fallback도 지원합니다.
+
+```text
+!new-session
+!new-session with-context
+```
 
 ### 파일과 이미지
 

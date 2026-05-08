@@ -2,18 +2,18 @@
 
 [English](../README.md) | [한국어](README.ko.md)
 
-로컬 AI 에이전트 CLI를 Discord로 연결하여 원격 모니터링 및 협업을 지원합니다. Codex CLI를 로컬 tmux 세션에서 실행하는 것을 1차 목표로 합니다.
+`DoBuDevel/discord-agent-bridge`를 기반으로 가져와 `atototo/discord-ai-bridge`로 커스텀한 로컬 Codex Discord 브리지입니다.
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/Tests-162%20passing-brightgreen.svg)](../tests)
+[![Tests](https://img.shields.io/badge/Tests-179%20passing-brightgreen.svg)](../tests)
 
 ## 개요
 
-Discord AI Bridge는 AI 코딩 어시스턴트(Codex, Claude Code, OpenCode)를 Discord에 연결하여 원격 모니터링과 협업을 가능하게 합니다. Discord 채널을 통해 AI 에이전트의 작업을 실시간으로 관찰하고, 팀과 진행 상황을 공유하며, 여러 프로젝트를 동시에 추적할 수 있습니다.
+Discord AI Bridge는 AI 코딩 어시스턴트(Codex, Claude Code, OpenCode)를 Discord에 연결하여 원격 모니터링과 협업을 가능하게 합니다. 이 커스텀 버전은 특히 로컬 Codex app-server 모드에 맞춰져 있습니다. Discord 메시지는 Codex turn으로 들어가고, Codex 답변은 프로젝트 채널로 돌아오며, 생성 이미지/파일은 Discord 첨부로 업로드되고, 승인 요청은 Discord reaction으로 처리됩니다.
 
-기본적으로 폴링 기반 아키텍처를 사용하여 3초마다 tmux 패널 내용을 캡처하고, 상태 변화를 감지하여 전용 Discord 채널로 업데이트를 스트리밍합니다. Codex는 선택적으로 `codex app-server --listen stdio://` 기반 JSON-RPC transport도 사용할 수 있습니다. 각 프로젝트는 자체 채널을 갖게 되며, 하나의 글로벌 데몬이 모든 연결을 효율적으로 관리합니다.
+원본의 tmux transport는 Claude/OpenCode 호환을 위해 유지합니다. Codex는 `CODEX_TRANSPORT=app-server`를 권장하며, 이때 bridge가 `codex app-server --listen stdio://`를 실행하고 터미널 화면 캡처 대신 JSON-RPC 이벤트를 사용합니다. 각 로컬 프로젝트는 Discord category/channel에 묶이고, 하나의 전역 daemon이 Discord 봇 연결을 관리합니다.
 
 ## 주요 기능
 
@@ -26,11 +26,12 @@ Discord AI Bridge는 AI 코딩 어시스턴트(Codex, Claude Code, OpenCode)를 
 - **프로젝트 격리**: 각 프로젝트마다 전용 Discord 채널 생성
 - **단일 데몬**: 하나의 Discord 봇 연결로 모든 프로젝트 관리
 - **세션 관리**: tmux 세션은 연결 해제 후에도 유지
+- **Discord 새 세션 명령**: `/new-session`으로 현재 채널의 Codex app-server thread만 새로 시작
 - **YOLO 모드**: `--yolo` 플래그로 Claude Code를 권한 확인 없이 실행
 - **Sandbox 모드**: `--sandbox` 플래그로 Claude Code를 Docker 컨테이너에서 격리 실행
 - **풍부한 CLI**: 설정, 제어, 모니터링을 위한 직관적인 명령어
 - **타입 안전**: 의존성 주입 패턴으로 작성된 TypeScript
-- **충분한 테스트**: Vitest로 162개의 유닛 테스트
+- **충분한 테스트**: Vitest 기반 단위 테스트
 
 ## 지원 플랫폼
 
@@ -48,6 +49,7 @@ Discord AI Bridge는 AI 코딩 어시스턴트(Codex, Claude Code, OpenCode)를 
 - **Discord 봇**: [Discord 봇 설정 가이드](DISCORD_SETUP.ko.md)를 따라 봇 생성
   - 필요 권한: Send Messages, Manage Channels, Read Message History, Embed Links, Add Reactions
   - 필요 인텐트: Guilds, GuildMessages, MessageContent, GuildMessageReactions
+  - 권장 OAuth scope: slash command 등록을 위한 `bot`, `applications.commands`
 - **AI 에이전트**: 다음 중 하나 이상:
   - [Codex CLI](https://developers.openai.com/codex)
   - [Claude Code](https://code.claude.com/docs/en/overview)
@@ -55,13 +57,9 @@ Discord AI Bridge는 AI 코딩 어시스턴트(Codex, Claude Code, OpenCode)를 
 
 ## 설치
 
-### npm으로 설치
-
-```bash
-npm install -g discord-ai-bridge
-```
-
 ### 소스에서 설치
+
+현재는 npm publish 없이 소스에서 설치해 쓰는 것을 기본으로 합니다.
 
 ```bash
 git clone https://github.com/atototo/discord-ai-bridge.git
@@ -69,6 +67,14 @@ cd discord-ai-bridge
 npm install
 npm run build
 npm link
+```
+
+`npm link` 후 전역 명령으로 사용할 수 있습니다.
+
+```bash
+agent-discord          # 전체 CLI
+agent-discord-codex    # 현재 디렉터리에서 Codex app-server daemon 재시작 + 프로젝트 시작
+agent-discord-down     # 전역 bridge daemon 종료
 ```
 
 ## 빠른 시작
@@ -100,27 +106,52 @@ agent-discord config --server SERVER_ID  # 서버 ID 수동 변경
 ```bash
 cd ~/projects/my-app
 
-# go 하나면 끝!
-agent-discord go
+# 권장: 현재 프로젝트를 Codex app-server 모드로 시작
+agent-discord-codex
 ```
 
-`go`는 모든 것을 자동으로 처리합니다: 설치된 에이전트 감지, 데몬 시작, Discord 채널 생성, tmux에서 에이전트 실행, 세션 연결까지 한 번에 수행합니다.
+`agent-discord-codex`는 현재 프로젝트 디렉터리에서 실행합니다. 기존 daemon을 내리고, `CODEX_TRANSPORT=app-server`로 bridge를 다시 띄운 뒤, 프로젝트 채널을 만들거나 재사용하고, attach 없이 로컬 Codex app-server 모드로 연결합니다.
 
 ```bash
-agent-discord go claude        # 에이전트를 직접 지정
-agent-discord go --yolo        # YOLO 모드 (권한 확인 건너뛰기, Claude Code 전용)
-agent-discord go --sandbox     # Sandbox 모드 (Docker 격리, Claude Code 전용)
+agent-discord-codex             # 현재 디렉터리에서 Codex app-server 시작
+agent-discord-down              # bridge daemon 종료
+agent-discord daemon status     # daemon 상태와 로그 위치 확인
+agent-discord go claude         # Claude Code tmux 모드
 ```
 
-AI 에이전트가 실행되고, 기본 tmux 모드에서는 3초마다 출력이 Discord로 스트리밍됩니다.
-
-Codex app-server 모드를 쓰려면 아래처럼 실행합니다.
+긴 명령으로 쓰면 아래와 같습니다.
 
 ```bash
-CODEX_TRANSPORT=app-server agent-discord go codex
+agent-discord daemon stop
+CODEX_TRANSPORT=app-server agent-discord go codex --no-attach
 ```
 
-이 모드에서는 bridge가 `codex app-server --listen stdio://`를 로컬 프로세스로 실행합니다. Discord 메시지는 Codex `turn/start` 요청으로 들어가고, assistant delta는 turn 완료 시 Discord로 전송되며, 명령 실행 승인 요청은 Discord 승인 반응으로 라우팅됩니다. 이 모드에는 attach할 Codex tmux UI가 없습니다.
+이 모드에서는 bridge가 `codex app-server --listen stdio://`를 로컬 프로세스로 실행합니다. Discord 메시지는 Codex `turn/start` 요청으로 들어가고, assistant 답변은 turn 완료 시 Discord로 전송되며, 명령/파일/권한 승인 요청은 Discord 승인 reaction으로 라우팅됩니다. 이 모드에는 attach할 Codex tmux UI가 없습니다.
+
+daemon 재시작으로 Codex app-server thread가 새로 만들어질 때는 같은 Discord 채널의 최근 메시지 몇 개를 가져와 첫 turn 앞에 가벼운 맥락으로 붙입니다. Codex 내부 thread를 억지로 복원하지는 않지만, 채널의 직전 대화 흐름을 참고할 수 있습니다. `DISCORD_CONTEXT_MESSAGES=0`이면 끌 수 있고, 숫자를 바꾸면 포함할 최근 메시지 수를 조정할 수 있습니다.
+
+### Discord에서 새 Codex 세션 시작
+
+Codex로 매핑된 Discord 채널에서 slash command를 사용할 수 있습니다.
+
+```text
+/new-session
+```
+
+Discord 채널과 프로젝트 매핑은 그대로 유지하고, 해당 프로젝트의 Codex app-server thread만 새로 만듭니다. 다음 메시지는 이전 맥락 없이 완전 새 Codex 채팅으로 시작합니다.
+
+새 Codex thread를 만들되 첫 메시지에 최근 Discord 채널 대화 몇 개를 참고로 붙이고 싶으면 옵션을 켭니다.
+
+```text
+/new-session with-context: true
+```
+
+Discord slash UI에는 `/new-session` 설명과 `with-context` 옵션 설명이 보이도록 등록됩니다. 명령이 보이지 않으면 봇을 `applications.commands` scope로 다시 초대했는지 확인하고 daemon을 재시작하세요. 텍스트 fallback도 지원합니다.
+
+```text
+!new-session
+!new-session with-context
+```
 
 이미 daemon이 떠 있다면 같은 환경변수로 다시 띄워야 합니다.
 
@@ -542,7 +573,6 @@ MIT 라이선스 - 자세한 내용은 [LICENSE](../LICENSE) 파일을 참조하
 
 - [Discord.js](https://discord.js.org/)로 제작
 - [Claude Code](https://code.claude.com/docs/en/overview)와 [OpenCode](https://github.com/OpenCodeAI/opencode)로 구동
-- [OpenClaw](https://github.com/nicepkg/openclaw)의 메신저 기반 명령 시스템에서 영감을 받았습니다. Discord를 통해 어디서나 장시간 실행되는 AI 에이전트 작업을 원격으로 제어하고 모니터링하려는 동기에서 시작되었습니다.
 
 ## 지원
 

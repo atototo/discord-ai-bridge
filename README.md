@@ -7,7 +7,7 @@ Custom local bridge for using Codex from Discord, based on `DoBuDevel/discord-ag
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Tests](https://img.shields.io/badge/Tests-171%20passing-brightgreen.svg)](./tests)
+[![Tests](https://img.shields.io/badge/Tests-179%20passing-brightgreen.svg)](./tests)
 
 ## Overview
 
@@ -29,6 +29,7 @@ The original tmux transport is still available for Claude/OpenCode compatibility
 - **Project Isolation**: Each project gets a dedicated Discord channel
 - **Single Daemon**: One Discord bot connection manages all projects
 - **Session Management**: Persistent tmux sessions survive disconnections
+- **Discord New Session Command**: `/new-session` resets the current channel's Codex app-server thread, with an optional context carry-over
 - **YOLO Mode**: Optional `--yolo` flag runs Claude Code with `--dangerously-skip-permissions`
 - **Sandbox Mode**: Optional `--sandbox` flag runs Claude Code in isolated Docker container
 - **Rich CLI**: Intuitive commands for setup, control, and monitoring
@@ -51,6 +52,7 @@ The original tmux transport is still available for Claude/OpenCode compatibility
 - **Discord Bot**: Create a bot following the [Discord Bot Setup Guide](docs/DISCORD_SETUP.md)
   - Required permissions: Send Messages, Manage Channels, Read Message History, Embed Links, Add Reactions
   - Required intents: Guilds, GuildMessages, MessageContent, GuildMessageReactions
+  - Recommended OAuth scopes: `bot` and `applications.commands` for slash commands
 - **AI Agent**: At least one of:
   - [Codex CLI](https://developers.openai.com/codex)
   - [Claude Code](https://code.claude.com/docs/en/overview)
@@ -133,6 +135,29 @@ CODEX_TRANSPORT=app-server agent-discord go codex
 In this mode Codex is started by the bridge as `codex app-server --listen stdio://`. Discord messages become Codex `turn/start` requests, assistant answers are posted back to Discord when the turn completes, and command/file-change/permission approval requests are routed to Discord reactions. There is no tmux Codex UI to attach to in this mode.
 
 When a daemon restart creates a fresh Codex app-server thread, the bridge fetches recent messages from the same Discord channel and prepends them as lightweight context to the first turn. This preserves enough conversational continuity without trying to persist Codex's internal thread state. Set `DISCORD_CONTEXT_MESSAGES=0` to disable it or another number to tune how many prior messages are included.
+
+### New Codex Sessions From Discord
+
+Use the slash command in a mapped Codex channel:
+
+```text
+/new-session
+```
+
+This keeps the Discord channel and project mapping unchanged, but resets the in-memory Codex app-server thread for that project. The next message starts a fresh Codex chat without previous context.
+
+If you want a fresh Codex thread that still receives recent Discord channel context on the first message, enable the optional slash command argument:
+
+```text
+/new-session with-context: true
+```
+
+The command is registered with a visible Discord description and an option description. If slash commands are not visible yet, reinvite the bot with the `applications.commands` scope or restart the daemon so it can register guild commands. A text fallback is also available:
+
+```text
+!new-session
+!new-session with-context
+```
 
 If the daemon is already running with a different transport, restart it with the same environment first:
 
