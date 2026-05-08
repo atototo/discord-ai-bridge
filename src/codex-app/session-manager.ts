@@ -43,6 +43,7 @@ type ThreadState = {
   channelId: string;
   discord: CodexAppServerSendMessageParams['discord'];
   activeTurns: Map<string, TurnState>;
+  typingTimers: Map<string, ReturnType<typeof setInterval>>;
   notifiedItems: Set<string>;
 };
 
@@ -83,7 +84,7 @@ export class CodexAppServerSessionManager {
     thread.channelId = params.channelId;
     thread.discord = params.discord;
 
-    await this.client.request('turn/start', {
+    const turnResponse = await this.client.request('turn/start', {
       threadId: thread.threadId,
       cwd: params.projectPath,
       input: this.buildUserInput(
@@ -92,16 +93,24 @@ export class CodexAppServerSessionManager {
         existingThread ? [] : params.recentMessages || []
       ),
     });
+    const turnId = turnResponse?.turn?.id;
+    if (turnId) {
+      await this.startTyping(thread, turnId);
+    }
   }
 
   resetThread(projectName: string): void {
     const existing = this.threads.get(projectName);
     if (!existing) return;
+    this.clearTypingTimers(existing);
     this.threads.delete(projectName);
     this.threadProjectNames.delete(existing.threadId);
   }
 
   stop(): void {
+    for (const thread of this.threads.values()) {
+      this.clearTypingTimers(thread);
+    }
     this.client.stop();
   }
 
@@ -133,6 +142,7 @@ export class CodexAppServerSessionManager {
       channelId: params.channelId,
       discord: params.discord,
       activeTurns: new Map<string, TurnState>(),
+      typingTimers: new Map<string, ReturnType<typeof setInterval>>(),
       notifiedItems: new Set<string>(),
     };
     this.threads.set(key, thread);
@@ -211,7 +221,7 @@ export class CodexAppServerSessionManager {
       const params = message.params || {};
       const thread = this.getThreadById(params.threadId);
       if (!thread || !params.item) return;
-      await this.sendItemProgress(thread, params.item);
+      await this.sendItemProgress(thread, params.item, params.turnId);
       return;
     }
 
@@ -223,6 +233,7 @@ export class CodexAppServerSessionManager {
       const turn = thread.activeTurns.get(turnId);
       const content = (turn?.finalText || turn?.text || '').trim();
       thread.activeTurns.delete(turnId);
+      this.stopTyping(thread, turnId);
       if (!content) {
         await thread.discord.sendToChannel(thread.channelId, '✅ 완료');
         return;
@@ -284,9 +295,33 @@ export class CodexAppServerSessionManager {
     }
   }
 
-  private async sendItemProgress(thread: ThreadState, item: any): Promise<void> {
+  private async sendItemProgress(thread: ThreadState, item: any, turnId?: string): Promise<void> {
     if (!item?.id || thread.notifiedItems.has(item.id)) return;
     thread.notifiedItems.add(item.id);
+    if (turnId && thread.typingTimers.has(turnId)) return;
     await thread.discord.sendTyping?.(thread.channelId);
+  }
+
+  private async startTyping(thread: ThreadState, turnId: string): Promise<void> {
+    this.stopTyping(thread, turnId);
+    await thread.discord.sendTyping?.(thread.channelId);
+    const timer = setInterval(() => {
+      thread.discord.sendTyping?.(thread.channelId).catch(() => {});
+    }, 8000);
+    thread.typingTimers.set(turnId, timer);
+  }
+
+  private stopTyping(thread: ThreadState, turnId: string): void {
+    const timer = thread.typingTimers.get(turnId);
+    if (!timer) return;
+    clearInterval(timer);
+    thread.typingTimers.delete(turnId);
+  }
+
+  private clearTypingTimers(thread: ThreadState): void {
+    for (const timer of thread.typingTimers.values()) {
+      clearInterval(timer);
+    }
+    thread.typingTimers.clear();
   }
 }

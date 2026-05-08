@@ -276,3 +276,10 @@
 - 기존 프로젝트 resume 경로도 app-server Codex일 때 `TmuxManager`를 생성하거나 tmux 세션을 보장하지 않도록 수정했다.
 - state의 `tmuxSession`에는 기존 schema 호환을 위해 `app-server:<projectName>` placeholder를 저장한다.
 - 검증: `npm run typecheck`, `npm test -- --run`(17 files, 192 tests), `npm run build` 통과.
+
+## [2026-05-08] fix | Codex turn 동안 Discord typing indicator 유지
+
+- 기존 typing indicator는 app-server `item/started` 이벤트가 올 때 한 번만 호출되어, 이미지 생성처럼 item 이벤트가 늦거나 적은 작업에서는 사용자가 거의 볼 수 없었다.
+- `turn/start` 성공 직후 바로 Discord typing indicator를 보내고, turn completion 전까지 8초마다 갱신하도록 바꿨다.
+- `turn/completed`, `resetThread`, `stop` 시 typing interval을 정리해 오래 남는 timer를 막는다.
+- 검증: `npm run typecheck`, `npm test -- --run`(17 files, 193 tests), `npm run build` 통과.

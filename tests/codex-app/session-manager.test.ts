@@ -132,6 +132,42 @@ describe('CodexAppServerSessionManager', () => {
     expect(turns[1].params.input[0].text).not.toContain('[Discord 최근 대화 맥락]');
   });
 
+  it('keeps Discord typing visible while an app-server turn is active', async () => {
+    vi.useFakeTimers();
+    const client = new FakeClient();
+    const discord = createDiscord();
+    const manager = new CodexAppServerSessionManager(client);
+
+    try {
+      await manager.sendMessage({
+        projectName: 'repo',
+        projectPath: '/repo',
+        channelId: 'channel-1',
+        content: '이미지 만들어줘',
+        attachments: [],
+        discord,
+      });
+
+      expect(discord.sendTyping).toHaveBeenCalledTimes(1);
+      expect(discord.sendTyping).toHaveBeenCalledWith('channel-1');
+
+      await vi.advanceTimersByTimeAsync(8000);
+      await vi.advanceTimersByTimeAsync(8000);
+      expect(discord.sendTyping).toHaveBeenCalledTimes(3);
+
+      await client.emitNotification({
+        method: 'turn/completed',
+        params: { threadId: 'thread-1', turn: { id: 'turn-1' } },
+      });
+
+      await vi.advanceTimersByTimeAsync(8000);
+      expect(discord.sendTyping).toHaveBeenCalledTimes(3);
+    } finally {
+      manager.stop();
+      vi.useRealTimers();
+    }
+  });
+
   it('starts a new thread for a project after resetThread', async () => {
     const client = new FakeClient();
     const manager = new CodexAppServerSessionManager(client);
@@ -333,7 +369,7 @@ describe('CodexAppServerSessionManager', () => {
     });
 
     expect(discord.sendToChannel).not.toHaveBeenCalled();
-    expect(discord.sendTyping).toHaveBeenCalledTimes(2);
+    expect(discord.sendTyping).toHaveBeenCalledTimes(1);
     expect(discord.sendTyping).toHaveBeenCalledWith('channel-1');
   });
 
@@ -368,7 +404,7 @@ describe('CodexAppServerSessionManager', () => {
     }
 
     expect(discord.sendToChannel).not.toHaveBeenCalled();
-    expect(discord.sendTyping).toHaveBeenCalledTimes(4);
+    expect(discord.sendTyping).toHaveBeenCalledTimes(1);
   });
 
   it('uses typing indicators for meaningful command progress notifications', async () => {
