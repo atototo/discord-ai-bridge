@@ -42,7 +42,7 @@ interface ChannelInfo {
 
 const NEW_SESSION_COMMAND = {
   name: 'new-session',
-  description: '현재 채널의 새 Codex 세션을 시작합니다',
+  description: '새 Codex 세션 시작. 최근 대화 참고는 with-context:true 옵션을 켭니다',
   options: [
     {
       type: ApplicationCommandOptionType.Boolean,

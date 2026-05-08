@@ -228,3 +228,5 @@
 - slash command가 아직 보이지 않는 환경을 위해 `!new-session`, `!new-session with-context` 텍스트 fallback도 추가했다.
 - README/README.ko/docs 한국어 README에 command 설명, Discord UI 설명, `applications.commands` scope 필요성을 정리했다.
 - 검증: `npm run typecheck`, `npm test -- --run`(17 files, 179 tests), `npm run build` 통과.
+- Discord slash command 첫 추천 목록에서도 `with-context:true` 사용 가능성을 알 수 있도록 `/new-session` command description 자체에 힌트를 추가했다.
+- README/README.ko/docs 한국어 README에 `agent-discord-codex`는 연결하려는 로컬 프로젝트 경로마다 한 번씩 실행하며, Discord에서 수동 채널 생성만으로는 bridge 프로젝트 경로가 등록되지 않는다는 설명을 추가했다.

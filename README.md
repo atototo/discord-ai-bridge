@@ -115,6 +115,8 @@ agent-discord-codex
 
 `agent-discord-codex` runs from the current project directory. It stops the existing daemon, restarts the bridge with `CODEX_TRANSPORT=app-server`, creates or resumes the project channel, and starts local Codex app-server mode without a tmux attach.
 
+Run this once from each local project path you want to connect. For example, running it in `~/projects/cocifee` creates or resumes that project's Discord category/channel, and running it later in `~/projects/wedding` creates or resumes a separate `wedding` category/channel. Manually creating Discord channels with the `+` button does not register a project path with the bridge.
+
 ```bash
 agent-discord-codex             # Codex app-server mode for this directory
 agent-discord-down              # Stop the bridge daemon
@@ -152,7 +154,7 @@ If you want a fresh Codex thread that still receives recent Discord channel cont
 /new-session with-context: true
 ```
 
-The command is registered with a visible Discord description and an option description. If slash commands are not visible yet, reinvite the bot with the `applications.commands` scope or restart the daemon so it can register guild commands. A text fallback is also available:
+The command is registered with a visible Discord description that mentions `with-context:true`, plus a separate option description after selecting the command. If slash commands are not visible yet, reinvite the bot with the `applications.commands` scope or restart the daemon so it can register guild commands. A text fallback is also available:
 
 ```text
 !new-session

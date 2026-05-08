@@ -112,6 +112,8 @@ agent-discord-codex
 
 `agent-discord-codex`는 현재 프로젝트 디렉터리에서 실행합니다. 기존 daemon을 내리고, `CODEX_TRANSPORT=app-server`로 bridge를 다시 띄운 뒤, 프로젝트 채널을 만들거나 재사용하고, attach 없이 로컬 Codex app-server 모드로 연결합니다.
 
+연결하고 싶은 로컬 프로젝트 경로마다 한 번씩 이 명령을 실행하면 됩니다. 예를 들어 `~/projects/cocifee`에서 실행하면 `cocifee` 프로젝트의 Discord category/channel을 만들거나 재사용하고, 나중에 `~/projects/wedding`에서 실행하면 별도의 `wedding` category/channel을 만들거나 재사용합니다. Discord에서 `+` 버튼으로 채널만 수동 생성하는 것은 bridge에 프로젝트 경로를 등록하지 않습니다.
+
 ```bash
 agent-discord-codex             # 현재 디렉터리에서 Codex app-server 시작
 agent-discord-down              # bridge daemon 종료
@@ -146,7 +148,7 @@ Discord 채널과 프로젝트 매핑은 그대로 유지하고, 해당 프로�
 /new-session with-context: true
 ```
 
-Discord slash UI에는 `/new-session` 설명과 `with-context` 옵션 설명이 보이도록 등록됩니다. 명령이 보이지 않으면 봇을 `applications.commands` scope로 다시 초대했는지 확인하고 daemon을 재시작하세요. 텍스트 fallback도 지원합니다.
+Discord slash UI의 첫 추천 목록에도 보이도록 `/new-session` 설명 자체에 `with-context:true` 힌트를 넣고, 명령 선택 후에는 `with-context` 옵션 설명도 따로 보이게 등록합니다. 명령이 보이지 않으면 봇을 `applications.commands` scope로 다시 초대했는지 확인하고 daemon을 재시작하세요. 텍스트 fallback도 지원합니다.
 
 ```text
 !new-session
