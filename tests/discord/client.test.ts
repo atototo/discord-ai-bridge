@@ -888,6 +888,45 @@ describe('DiscordClient', () => {
       expect(mockChannel.send).toHaveBeenCalledWith('test message');
     });
 
+    it('sendStatusMessage sends content and returns the Discord message id', async () => {
+      const client = new DiscordClient('test-token');
+
+      const mockChannel = {
+        isTextBased: () => true,
+        send: vi.fn().mockResolvedValue({ id: 'msg-123' }),
+      };
+
+      const mockClient = getMockClient();
+      mockClient.channels.fetch.mockResolvedValue(mockChannel);
+
+      const result = await client.sendStatusMessage('ch-123', 'status');
+
+      expect(result).toBe('msg-123');
+      expect(mockChannel.send).toHaveBeenCalledWith('status');
+    });
+
+    it('updateMessage fetches and edits an existing Discord message', async () => {
+      const client = new DiscordClient('test-token');
+
+      const mockMessage = {
+        edit: vi.fn().mockResolvedValue(undefined),
+      };
+      const mockChannel = {
+        isTextBased: () => true,
+        messages: {
+          fetch: vi.fn().mockResolvedValue(mockMessage),
+        },
+      };
+
+      const mockClient = getMockClient();
+      mockClient.channels.fetch.mockResolvedValue(mockChannel);
+
+      await client.updateMessage('ch-123', 'msg-123', 'updated status');
+
+      expect(mockChannel.messages.fetch).toHaveBeenCalledWith('msg-123');
+      expect(mockMessage.edit).toHaveBeenCalledWith('updated status');
+    });
+
     it('creates a work thread in a text channel', async () => {
       const client = new DiscordClient('test-token');
       const mockChannel = {

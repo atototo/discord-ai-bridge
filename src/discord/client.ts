@@ -880,6 +880,35 @@ export class DiscordClient {
     }
   }
 
+  async sendStatusMessage(channelId: string, content: string): Promise<string | null> {
+    try {
+      const channel = await this.client.channels.fetch(channelId);
+      if (!channel?.isTextBased()) {
+        console.warn(`Channel ${channelId} is not a text channel`);
+        return null;
+      }
+      const message = await (channel as TextChannel).send(content);
+      return message?.id || null;
+    } catch (error) {
+      console.error(`Failed to send status message to channel ${channelId}:`, error);
+      return null;
+    }
+  }
+
+  async updateMessage(channelId: string, messageId: string, content: string): Promise<void> {
+    try {
+      const channel = await this.client.channels.fetch(channelId);
+      if (!channel?.isTextBased() || !(channel as TextChannel).messages?.fetch) {
+        console.warn(`Channel ${channelId} cannot fetch messages`);
+        return;
+      }
+      const message = await (channel as TextChannel).messages.fetch(messageId);
+      await message.edit(content);
+    } catch (error) {
+      console.error(`Failed to update message ${messageId} in channel ${channelId}:`, error);
+    }
+  }
+
   async sendTyping(channelId: string): Promise<void> {
     try {
       const channel = await this.client.channels.fetch(channelId);

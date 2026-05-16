@@ -341,3 +341,21 @@
 - 이미 Discord thread 안에서 들어온 긴 요청은 추가 thread 생성 질문 없이 그 thread session으로 바로 라우팅한다.
 - Discord client callback meta에 `isThread`를 추가했고, `createWorkThread()` channel operation을 추가했다.
 - 검증: bundled Node 24 기준 `npm test -- tests/index.test.ts tests/discord/client.test.ts`, `npm run typecheck`, `npm test`(17 files, 206 tests), `npm run build` 통과.
+
+## [2026-05-16] feature | Codex run status message
+
+- 긴 작업 중 Discord에는 typing indicator만 보여 사용자가 진행/정체/승인 대기 여부를 알 수 없는 문제가 있었다.
+- Codex app-server turn 시작 시 Discord run status message를 하나 만들고, 이후 같은 message를 edit해 `starting`, `running`, `waiting_approval`, `stalled`, `completed` 상태와 현재 단계를 표시하도록 했다.
+- `item/started`는 명령 실행/웹 검색/도구 처리 단계로 status를 갱신하고, approval request는 승인 대기 및 승인 결과를 status에 반영한다.
+- 진행 중 status는 1분마다 같은 message를 edit해 `마지막 활동: N초/N분 전`을 갱신하며, 새 activity가 오면 다시 `방금`으로 돌아간다.
+- 완료 후에는 status를 `completed`와 `최종 답변 전송 완료`로 갱신하고 heartbeat timer를 정리한다.
+- timeout watchdog은 기존 별도 안내 메시지에 더해 status message를 `stalled`로 갱신한다.
+- 검증: bundled Node 24 기준 `npm test -- tests/codex-app/session-manager.test.ts tests/discord/client.test.ts`, `npm run typecheck`, `npm test`(17 files, 212 tests), `npm run build` 통과.
+
+## [2026-05-16] fix | Codex run status 중복 생성 방지
+
+- 실제 Discord smoke test에서 한 turn 안에 `starting` status와 `running/completed` status가 두 블록처럼 보이는 현상을 확인했다.
+- 원인은 첫 status message 생성 요청이 Discord message id를 돌려주기 전에 Codex `item/started` 진행 이벤트가 먼저 도착하면, 아직 `statusMessageId`가 없어 두 번째 status message를 새로 생성할 수 있는 race condition이었다.
+- `TurnState.statusMessagePromise`를 추가해 같은 turn의 pending status 생성을 공유하고, 진행 이벤트는 새 메시지를 만들지 않고 기존 생성 완료를 기다린 뒤 같은 message를 edit하도록 수정했다.
+- `agentMessage` 시작 단계 문구는 내부 이벤트명 대신 `답변 작성 중`으로 표시한다.
+- 검증: bundled Node 24 기준 `npm test -- tests/codex-app/session-manager.test.ts -t "duplicate status|answer writing"`, `npm test -- tests/codex-app/session-manager.test.ts tests/discord/client.test.ts`(62 tests), `npm run typecheck`, `npm test`(17 files, 214 tests), `npm run build` 통과.

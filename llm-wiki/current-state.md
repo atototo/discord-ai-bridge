@@ -73,12 +73,14 @@
 - Phase 2의 첫 구현으로 `/sessions` slash command와 `!sessions` fallback을 추가했다. 현재 project category 안의 Codex 세션 채널 목록을 보여주고, 현재 channel을 표시한다.
 - Phase 3의 첫 구현으로 긴 Codex 요청을 main channel에서 감지하면 Discord 버튼으로 `작업 thread 만들기` 또는 `현재 채널에서 계속`을 선택하게 한다. thread 생성을 선택하면 Discord thread를 만들고 그 thread channel ID를 Codex app-server session key로 사용한다.
 - 이미 Discord thread 안에서 온 요청은 다시 thread 생성을 묻지 않고 해당 thread session으로 바로 라우팅한다.
+- Phase 4의 첫 구현으로 Codex app-server turn마다 Discord run status message를 하나 생성하고, `starting`, `running`, `waiting_approval`, `stalled`, `completed` 상태를 같은 메시지 edit으로 갱신한다. 진행 중에는 `마지막 활동: N초/N분 전` heartbeat를 1분마다 갱신하고, typing indicator는 보조 신호로 유지한다.
+- Phase 4 smoke test에서 status message가 두 개처럼 보이는 race condition을 확인해 수정했다. 첫 status 생성이 pending인 동안 진행 이벤트가 들어와도 같은 `statusMessagePromise`를 공유하므로 새 status message를 만들지 않고 기존 message를 edit한다. `agentMessage` 진행 문구는 `답변 작성 중`으로 표시한다.
 
 ## 다음 작업
 
-1. daemon 재시작 후 실제 Discord main channel에서 긴 요청을 보내 `작업 thread 만들기` 버튼 선택 시 새 thread가 생성되고 그 안에서 Codex 답변/승인/최종 결과가 이어지는지 smoke test한다.
-2. 같은 긴 요청에서 `현재 채널에서 계속` 선택 시 새 thread 없이 main channel session으로 진행되는지 확인한다.
-3. Phase 4로 run heartbeat/status UX를 설계/구현한다. 긴 작업 중 Discord 채팅 상에서 마지막 이벤트 시간, 현재 실행 중인 turn, timeout 안내를 볼 수 있어야 한다.
+1. daemon 재시작 후 실제 Discord thread에서 새 status 중복 방지 수정이 반영되어 한 turn당 status message가 하나만 유지되는지 smoke test한다.
+2. 승인 요청이 필요한 작업에서 status가 `waiting_approval`로 바뀌고 승인 후 `running`으로 복귀하는지 확인한다.
+3. Phase 4 후속으로 status message 문구/단계 라벨을 실제 사용 로그를 보며 더 다듬을지 결정한다.
 4. 필요하면 lazy 인식한 channel mapping을 state에 영구 저장할지 결정한다.
 
 ## 열린 질문 / 블로커

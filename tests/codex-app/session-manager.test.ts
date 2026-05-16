@@ -52,6 +52,22 @@ function createDiscord() {
   } as any;
 }
 
+function createDiscordWithStatus() {
+  return {
+    ...createDiscord(),
+    sendStatusMessage: vi.fn().mockResolvedValue('status-1'),
+    updateMessage: vi.fn().mockResolvedValue(undefined),
+  } as any;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
+}
+
 describe('CodexAppServerSessionManager', () => {
   it('starts one app-server thread per project and sends turns with local image inputs', async () => {
     const client = new FakeClient();
@@ -184,6 +200,265 @@ describe('CodexAppServerSessionManager', () => {
 
       await vi.advanceTimersByTimeAsync(8000);
       expect(discord.sendTyping).toHaveBeenCalledTimes(3);
+    } finally {
+      manager.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it('creates and updates a single Discord run status message during a turn', async () => {
+    const client = new FakeClient();
+    const discord = createDiscordWithStatus();
+    const manager = new CodexAppServerSessionManager(client);
+
+    await manager.sendMessage({
+      projectName: 'repo',
+      projectPath: '/repo',
+      channelId: 'channel-1',
+      content: '긴 작업 진행해',
+      attachments: [],
+      discord,
+    });
+
+    expect(discord.sendStatusMessage).toHaveBeenCalledWith(
+      'channel-1',
+      expect.stringContaining('Codex 작업 진행 중')
+    );
+    expect(discord.sendStatusMessage.mock.calls[0][1]).toContain('상태: starting');
+
+    await client.emitNotification({
+      method: 'item/started',
+      params: {
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        item: { type: 'commandExecution', id: 'cmd-1', command: 'npm test', cwd: '/repo' },
+      },
+    });
+
+    expect(discord.updateMessage).toHaveBeenCalledWith(
+      'channel-1',
+      'status-1',
+      expect.stringContaining('명령 실행 중')
+    );
+
+    await client.emitNotification({
+      method: 'item/completed',
+      params: {
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        item: { type: 'agentMessage', id: 'msg-1', text: '완료 답변' },
+      },
+    });
+    await client.emitNotification({
+      method: 'turn/completed',
+      params: { threadId: 'thread-1', turn: { id: 'turn-1' } },
+    });
+
+    expect(discord.updateMessage).toHaveBeenLastCalledWith(
+      'channel-1',
+      'status-1',
+      expect.stringContaining('상태: completed')
+    );
+    expect(discord.updateMessage).toHaveBeenLastCalledWith(
+      'channel-1',
+      'status-1',
+      expect.stringContaining('최종 답변 전송 완료')
+    );
+    expect(discord.sendToChannel).toHaveBeenCalledWith(
+      'channel-1',
+      expect.stringContaining('완료 답변')
+    );
+  });
+
+  it('labels started agentMessage items as answer writing progress', async () => {
+    const client = new FakeClient();
+    const discord = createDiscordWithStatus();
+    const manager = new CodexAppServerSessionManager(client);
+
+    await manager.sendMessage({
+      projectName: 'repo',
+      projectPath: '/repo',
+      channelId: 'channel-1',
+      content: '계획 알려줘',
+      attachments: [],
+      discord,
+    });
+
+    await client.emitNotification({
+      method: 'item/started',
+      params: {
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        item: { type: 'agentMessage', id: 'msg-1' },
+      },
+    });
+
+    expect(discord.updateMessage).toHaveBeenCalledWith(
+      'channel-1',
+      'status-1',
+      expect.stringContaining('답변 작성 중')
+    );
+    expect(discord.updateMessage).not.toHaveBeenCalledWith(
+      'channel-1',
+      'status-1',
+      expect.stringContaining('agentMessage 처리 중')
+    );
+  });
+
+  it('does not create duplicate status messages when progress arrives while the first status send is pending', async () => {
+    const client = new FakeClient();
+    const statusSend = deferred<string | null>();
+    const discord = {
+      ...createDiscord(),
+      sendStatusMessage: vi.fn().mockReturnValue(statusSend.promise),
+      updateMessage: vi.fn().mockResolvedValue(undefined),
+    } as any;
+    const manager = new CodexAppServerSessionManager(client);
+
+    const pendingSend = manager.sendMessage({
+      projectName: 'repo',
+      projectPath: '/repo',
+      channelId: 'channel-1',
+      content: '긴 작업 진행해',
+      attachments: [],
+      discord,
+    });
+
+    await vi.waitFor(() => {
+      expect(discord.sendStatusMessage).toHaveBeenCalledTimes(1);
+    });
+
+    const pendingProgress = client.emitNotification({
+      method: 'item/started',
+      params: {
+        threadId: 'thread-1',
+        turnId: 'turn-1',
+        item: { type: 'agentMessage', id: 'msg-1' },
+      },
+    });
+
+    expect(discord.sendStatusMessage).toHaveBeenCalledTimes(1);
+
+    statusSend.resolve('status-1');
+    await pendingProgress;
+    await pendingSend;
+
+    expect(discord.sendStatusMessage).toHaveBeenCalledTimes(1);
+    expect(discord.updateMessage).toHaveBeenCalledWith(
+      'channel-1',
+      'status-1',
+      expect.stringContaining('답변 작성 중')
+    );
+  });
+
+  it('refreshes the run status message with elapsed time while a turn is active', async () => {
+    vi.useFakeTimers();
+    const client = new FakeClient();
+    const discord = createDiscordWithStatus();
+    const manager = new CodexAppServerSessionManager(client);
+
+    try {
+      await manager.sendMessage({
+        projectName: 'repo',
+        projectPath: '/repo',
+        channelId: 'channel-1',
+        content: '긴 작업 진행해',
+        attachments: [],
+        discord,
+      });
+
+      await vi.advanceTimersByTimeAsync(60000);
+
+      expect(discord.updateMessage).toHaveBeenCalledWith(
+        'channel-1',
+        'status-1',
+        expect.stringContaining('마지막 활동: 1분 전')
+      );
+
+      await client.emitNotification({
+        method: 'item/started',
+        params: {
+          threadId: 'thread-1',
+          turnId: 'turn-1',
+          item: { type: 'commandExecution', id: 'cmd-1', command: 'npm test', cwd: '/repo' },
+        },
+      });
+
+      expect(discord.updateMessage).toHaveBeenLastCalledWith(
+        'channel-1',
+        'status-1',
+        expect.stringContaining('마지막 활동: 방금')
+      );
+
+      await client.emitNotification({
+        method: 'turn/completed',
+        params: { threadId: 'thread-1', turn: { id: 'turn-1' } },
+      });
+      discord.updateMessage.mockClear();
+      await vi.advanceTimersByTimeAsync(60000);
+
+      expect(discord.updateMessage).not.toHaveBeenCalled();
+    } finally {
+      manager.stop();
+      vi.useRealTimers();
+    }
+  });
+
+  it('marks a Discord run status message as waiting for approval', async () => {
+    const client = new FakeClient();
+    const discord = createDiscordWithStatus();
+    const manager = new CodexAppServerSessionManager(client);
+
+    await manager.sendMessage({
+      projectName: 'repo',
+      projectPath: '/repo',
+      channelId: 'channel-1',
+      content: '테스트 실행해줘',
+      attachments: [],
+      discord,
+    });
+
+    await client.emitServerRequest({
+      id: 99,
+      method: 'item/commandExecution/requestApproval',
+      params: { threadId: 'thread-1', turnId: 'turn-1', command: 'npm test', cwd: '/repo' },
+    });
+
+    expect(discord.updateMessage).toHaveBeenCalledWith(
+      'channel-1',
+      'status-1',
+      expect.stringContaining('상태: waiting_approval')
+    );
+    expect(discord.updateMessage).toHaveBeenCalledWith(
+      'channel-1',
+      'status-1',
+      expect.stringContaining('승인 완료')
+    );
+  });
+
+  it('marks a Discord run status message as stalled after the timeout', async () => {
+    vi.useFakeTimers();
+    const client = new FakeClient();
+    const discord = createDiscordWithStatus();
+    const manager = new CodexAppServerSessionManager(client, { turnTimeoutMs: 1000 });
+
+    try {
+      await manager.sendMessage({
+        projectName: 'repo',
+        projectPath: '/repo',
+        channelId: 'channel-1',
+        content: '오래 걸리는 작업',
+        attachments: [],
+        discord,
+      });
+
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(discord.updateMessage).toHaveBeenCalledWith(
+        'channel-1',
+        'status-1',
+        expect.stringContaining('상태: stalled')
+      );
     } finally {
       manager.stop();
       vi.useRealTimers();

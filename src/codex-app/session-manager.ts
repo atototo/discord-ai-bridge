@@ -35,6 +35,8 @@ export interface CodexAppServerSendMessageParams {
       timeoutMs?: number
     ): Promise<boolean>;
     sendTyping?(channelId: string): Promise<void>;
+    sendStatusMessage?(channelId: string, content: string): Promise<string | null>;
+    updateMessage?(channelId: string, messageId: string, content: string): Promise<void>;
   };
 }
 
@@ -46,13 +48,21 @@ type ThreadState = {
   activeTurns: Map<string, TurnState>;
   typingTimers: Map<string, ReturnType<typeof setInterval>>;
   timeoutTimers: Map<string, ReturnType<typeof setTimeout>>;
+  statusTimers: Map<string, ReturnType<typeof setInterval>>;
   notifiedItems: Set<string>;
 };
 
 type TurnState = {
   text: string;
   finalText?: string;
+  statusMessageId?: string;
+  statusMessagePromise?: Promise<string | null>;
+  status?: RunStatus;
+  statusDetail?: string;
+  lastActivityAt: number;
 };
+
+type RunStatus = 'starting' | 'running' | 'waiting_approval' | 'stalled' | 'completed' | 'failed';
 
 const DISCORD_OUTPUT_INSTRUCTIONS = [
   '',
@@ -100,6 +110,8 @@ export class CodexAppServerSessionManager {
     });
     const turnId = turnResponse?.turn?.id;
     if (turnId) {
+      thread.activeTurns.set(turnId, { text: '', status: 'starting', lastActivityAt: Date.now() });
+      await this.updateTurnStatus(thread, turnId, 'starting', '요청을 Codex app-server에 전달했습니다.');
       await this.startTyping(thread, turnId);
       this.startTurnTimeout(thread, turnId);
     }
@@ -151,6 +163,7 @@ export class CodexAppServerSessionManager {
       activeTurns: new Map<string, TurnState>(),
       typingTimers: new Map<string, ReturnType<typeof setInterval>>(),
       timeoutTimers: new Map<string, ReturnType<typeof setTimeout>>(),
+      statusTimers: new Map<string, ReturnType<typeof setInterval>>(),
       notifiedItems: new Set<string>(),
     };
     this.threads.set(key, thread);
@@ -208,8 +221,9 @@ export class CodexAppServerSessionManager {
       const params = message.params || {};
       const thread = this.getThreadById(params.threadId);
       if (!thread || !params.turnId) return;
-      const turn = thread.activeTurns.get(params.turnId) || { text: '' };
+      const turn = thread.activeTurns.get(params.turnId) || { text: '', lastActivityAt: Date.now() };
       turn.text += params.delta || '';
+      turn.lastActivityAt = Date.now();
       thread.activeTurns.set(params.turnId, turn);
       return;
     }
@@ -219,8 +233,9 @@ export class CodexAppServerSessionManager {
       const thread = this.getThreadById(params.threadId);
       const item = params.item;
       if (!thread || !params.turnId || item?.type !== 'agentMessage') return;
-      const turn = thread.activeTurns.get(params.turnId) || { text: '' };
+      const turn = thread.activeTurns.get(params.turnId) || { text: '', lastActivityAt: Date.now() };
       turn.finalText = item.text || '';
+      turn.lastActivityAt = Date.now();
       thread.activeTurns.set(params.turnId, turn);
       return;
     }
@@ -240,14 +255,19 @@ export class CodexAppServerSessionManager {
       if (!thread || !turnId) return;
       const turn = thread.activeTurns.get(turnId);
       const content = (turn?.finalText || turn?.text || '').trim();
-      thread.activeTurns.delete(turnId);
       this.stopTyping(thread, turnId);
       this.stopTurnTimeout(thread, turnId);
       if (!content) {
         await thread.discord.sendToChannel(thread.channelId, '✅ 완료');
+        await this.updateTurnStatus(thread, turnId, 'completed', '최종 답변 전송 완료');
+        this.stopStatusHeartbeat(thread, turnId);
+        thread.activeTurns.delete(turnId);
         return;
       }
       await this.sendFinalAnswer(thread, content);
+      await this.updateTurnStatus(thread, turnId, 'completed', '최종 답변 전송 완료');
+      this.stopStatusHeartbeat(thread, turnId);
+      thread.activeTurns.delete(turnId);
     }
   }
 
@@ -258,9 +278,16 @@ export class CodexAppServerSessionManager {
 
     const approvalToolName = this.approvalToolName(message.method);
     if (approvalToolName) {
+      const turnId = params.turnId || this.firstActiveTurnId(thread);
+      if (thread && turnId) {
+        await this.updateTurnStatus(thread, turnId, 'waiting_approval', this.approvalStatusDetail(approvalToolName, params));
+      }
       const approved = thread?.discord.sendApprovalRequest
         ? await thread.discord.sendApprovalRequest(thread.channelId, approvalToolName, params)
         : false;
+      if (thread && turnId) {
+        await this.updateTurnStatus(thread, turnId, 'running', approved ? '승인 완료. 작업을 계속 진행합니다.' : '승인 거절. Codex에 거절 결과를 전달했습니다.');
+      }
       this.client.respond(message.id, { decision: approved ? 'accept' : 'decline' });
       return;
     }
@@ -307,8 +334,153 @@ export class CodexAppServerSessionManager {
   private async sendItemProgress(thread: ThreadState, item: any, turnId?: string): Promise<void> {
     if (!item?.id || thread.notifiedItems.has(item.id)) return;
     thread.notifiedItems.add(item.id);
+    if (turnId) {
+      await this.updateTurnStatus(thread, turnId, 'running', this.itemProgressDetail(item));
+    }
     if (turnId && thread.typingTimers.has(turnId)) return;
     await thread.discord.sendTyping?.(thread.channelId);
+  }
+
+  private async updateTurnStatus(
+    thread: ThreadState,
+    turnId: string,
+    status: RunStatus,
+    detail: string,
+    options: { touch?: boolean } = {}
+  ): Promise<void> {
+    const turn = thread.activeTurns.get(turnId);
+    if (!turn) return;
+
+    turn.status = status;
+    turn.statusDetail = detail;
+    if (options.touch !== false) {
+      turn.lastActivityAt = Date.now();
+    }
+    const content = this.formatRunStatus(status, detail, turn.lastActivityAt);
+
+    if (!turn.statusMessageId) {
+      if (!turn.statusMessagePromise) {
+        turn.statusMessagePromise = thread.discord.sendStatusMessage?.(thread.channelId, content)
+          ?? Promise.resolve(null);
+        thread.activeTurns.set(turnId, turn);
+      }
+
+      const messageId = await turn.statusMessagePromise;
+      const latest = thread.activeTurns.get(turnId);
+      if (!latest) return;
+      latest.statusMessagePromise = undefined;
+      if (messageId) {
+        latest.statusMessageId = messageId;
+        this.startStatusHeartbeat(thread, turnId);
+        await thread.discord.updateMessage?.(
+          thread.channelId,
+          messageId,
+          this.formatRunStatus(
+            latest.status || status,
+            latest.statusDetail || detail,
+            latest.lastActivityAt
+          )
+        );
+      }
+      thread.activeTurns.set(turnId, latest);
+      return;
+    }
+
+    await thread.discord.updateMessage?.(thread.channelId, turn.statusMessageId, content);
+    thread.activeTurns.set(turnId, turn);
+  }
+
+  private async refreshTurnStatus(thread: ThreadState, turnId: string): Promise<void> {
+    const turn = thread.activeTurns.get(turnId);
+    if (!turn?.statusMessageId || !turn.status || !turn.statusDetail) return;
+    if (turn.status === 'completed' || turn.status === 'failed') return;
+    await thread.discord.updateMessage?.(
+      thread.channelId,
+      turn.statusMessageId,
+      this.formatRunStatus(turn.status, turn.statusDetail, turn.lastActivityAt)
+    );
+  }
+
+  private formatRunStatus(status: RunStatus, detail: string, lastActivityAt: number): string {
+    const icon = this.statusIcon(status);
+    return [
+      `${icon} **${this.statusTitle(status)}**`,
+      `상태: ${status}`,
+      `마지막 활동: ${this.relativeActivity(lastActivityAt)}`,
+      `현재 단계: ${detail}`,
+    ].join('\n');
+  }
+
+  private relativeActivity(lastActivityAt: number): string {
+    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - lastActivityAt) / 1000));
+    if (elapsedSeconds < 10) return '방금';
+    if (elapsedSeconds < 60) return `${elapsedSeconds}초 전`;
+    const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+    if (elapsedMinutes < 60) return `${elapsedMinutes}분 전`;
+    const elapsedHours = Math.floor(elapsedMinutes / 60);
+    return `${elapsedHours}시간 전`;
+  }
+
+  private statusTitle(status: RunStatus): string {
+    switch (status) {
+      case 'completed':
+        return 'Codex 작업 완료';
+      case 'stalled':
+        return 'Codex 작업 정체 가능';
+      case 'failed':
+        return 'Codex 작업 실패';
+      case 'waiting_approval':
+        return 'Codex 승인 대기';
+      default:
+        return 'Codex 작업 진행 중';
+    }
+  }
+
+  private statusIcon(status: RunStatus): string {
+    switch (status) {
+      case 'completed':
+        return '✅';
+      case 'stalled':
+      case 'failed':
+        return '⚠️';
+      case 'waiting_approval':
+        return '🟠';
+      default:
+        return '🟡';
+    }
+  }
+
+  private itemProgressDetail(item: any): string {
+    switch (item.type) {
+      case 'agentMessage':
+        return '답변 작성 중';
+      case 'commandExecution':
+        return `명령 실행 중: \`${this.truncateInline(item.command || 'command')}\``;
+      case 'webSearch':
+        return `웹 검색 중: \`${this.truncateInline(item.query || item.action || 'search')}\``;
+      case 'fileChange':
+        return '파일 변경 준비 중';
+      default:
+        return `${item.type || '도구'} 처리 중`;
+    }
+  }
+
+  private approvalStatusDetail(toolName: string, params: any): string {
+    if (toolName === 'commandExecution' && params?.command) {
+      return `명령 실행 승인 대기: \`${this.truncateInline(params.command)}\``;
+    }
+    if (toolName === 'fileChange') return '파일 변경 승인 대기';
+    if (toolName === 'permissions') return '권한 변경 승인 대기';
+    return '사용자 승인 대기';
+  }
+
+  private truncateInline(value: string, maxLength: number = 140): string {
+    const normalized = String(value).replace(/\s+/g, ' ').trim();
+    return normalized.length > maxLength ? normalized.slice(0, maxLength - 1) + '…' : normalized;
+  }
+
+  private firstActiveTurnId(thread?: ThreadState): string | undefined {
+    return thread ? thread.activeTurns.keys().next().value : undefined;
   }
 
   private async startTyping(thread: ThreadState, turnId: string): Promise<void> {
@@ -327,11 +499,34 @@ export class CodexAppServerSessionManager {
     thread.typingTimers.delete(turnId);
   }
 
+  private startStatusHeartbeat(thread: ThreadState, turnId: string): void {
+    if (thread.statusTimers.has(turnId)) return;
+    const timer = setInterval(() => {
+      this.refreshTurnStatus(thread, turnId).catch(() => {});
+    }, 60000);
+    thread.statusTimers.set(turnId, timer);
+  }
+
+  private stopStatusHeartbeat(thread: ThreadState, turnId: string): void {
+    const timer = thread.statusTimers.get(turnId);
+    if (!timer) return;
+    clearInterval(timer);
+    thread.statusTimers.delete(turnId);
+  }
+
   private startTurnTimeout(thread: ThreadState, turnId: string): void {
     this.stopTurnTimeout(thread, turnId);
     const timer = setTimeout(() => {
+      this.updateTurnStatus(
+        thread,
+        turnId,
+        'stalled',
+        '제한 시간 동안 완료 이벤트가 도착하지 않았습니다.',
+        { touch: false }
+      ).catch(() => {});
       thread.activeTurns.delete(turnId);
       this.stopTyping(thread, turnId);
+      this.stopStatusHeartbeat(thread, turnId);
       thread.timeoutTimers.delete(turnId);
       thread.discord.sendToChannel(
         thread.channelId,
@@ -357,5 +552,9 @@ export class CodexAppServerSessionManager {
       clearTimeout(timer);
     }
     thread.timeoutTimers.clear();
+    for (const timer of thread.statusTimers.values()) {
+      clearInterval(timer);
+    }
+    thread.statusTimers.clear();
   }
 }
