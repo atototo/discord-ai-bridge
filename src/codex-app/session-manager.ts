@@ -45,6 +45,7 @@ type ThreadState = {
   discord: CodexAppServerSendMessageParams['discord'];
   activeTurns: Map<string, TurnState>;
   typingTimers: Map<string, ReturnType<typeof setInterval>>;
+  timeoutTimers: Map<string, ReturnType<typeof setTimeout>>;
   notifiedItems: Set<string>;
 };
 
@@ -65,14 +66,17 @@ export interface CodexAppServerSessionManagerOptions {
    * Deprecated. Assistant text is sent on completion so Discord receives one coherent answer.
    */
   streamFlushMs?: number;
+  turnTimeoutMs?: number;
 }
 
 export class CodexAppServerSessionManager {
   private started = false;
   private threads = new Map<string, ThreadState>();
   private threadProjectNames = new Map<string, string>();
+  private turnTimeoutMs: number;
 
-  constructor(private client: CodexAppServerClientLike, _options: CodexAppServerSessionManagerOptions = {}) {
+  constructor(private client: CodexAppServerClientLike, options: CodexAppServerSessionManagerOptions = {}) {
+    this.turnTimeoutMs = options.turnTimeoutMs ?? 30 * 60 * 1000;
     this.client.onNotification((message) => this.handleNotification(message));
     this.client.onServerRequest((message) => this.handleServerRequest(message));
   }
@@ -97,6 +101,7 @@ export class CodexAppServerSessionManager {
     const turnId = turnResponse?.turn?.id;
     if (turnId) {
       await this.startTyping(thread, turnId);
+      this.startTurnTimeout(thread, turnId);
     }
   }
 
@@ -145,6 +150,7 @@ export class CodexAppServerSessionManager {
       discord: params.discord,
       activeTurns: new Map<string, TurnState>(),
       typingTimers: new Map<string, ReturnType<typeof setInterval>>(),
+      timeoutTimers: new Map<string, ReturnType<typeof setTimeout>>(),
       notifiedItems: new Set<string>(),
     };
     this.threads.set(key, thread);
@@ -236,6 +242,7 @@ export class CodexAppServerSessionManager {
       const content = (turn?.finalText || turn?.text || '').trim();
       thread.activeTurns.delete(turnId);
       this.stopTyping(thread, turnId);
+      this.stopTurnTimeout(thread, turnId);
       if (!content) {
         await thread.discord.sendToChannel(thread.channelId, '✅ 완료');
         return;
@@ -320,10 +327,35 @@ export class CodexAppServerSessionManager {
     thread.typingTimers.delete(turnId);
   }
 
+  private startTurnTimeout(thread: ThreadState, turnId: string): void {
+    this.stopTurnTimeout(thread, turnId);
+    const timer = setTimeout(() => {
+      thread.activeTurns.delete(turnId);
+      this.stopTyping(thread, turnId);
+      thread.timeoutTimers.delete(turnId);
+      thread.discord.sendToChannel(
+        thread.channelId,
+        '⚠️ Codex 응답이 제한 시간 안에 완료되지 않아 중단 표시했습니다. `/new-session` 또는 `!new-session`으로 새 세션을 시작한 뒤 다시 요청해 주세요.'
+      ).catch(() => {});
+    }, this.turnTimeoutMs);
+    thread.timeoutTimers.set(turnId, timer);
+  }
+
+  private stopTurnTimeout(thread: ThreadState, turnId: string): void {
+    const timer = thread.timeoutTimers.get(turnId);
+    if (!timer) return;
+    clearTimeout(timer);
+    thread.timeoutTimers.delete(turnId);
+  }
+
   private clearTypingTimers(thread: ThreadState): void {
     for (const timer of thread.typingTimers.values()) {
       clearInterval(timer);
     }
     thread.typingTimers.clear();
+    for (const timer of thread.timeoutTimers.values()) {
+      clearTimeout(timer);
+    }
+    thread.timeoutTimers.clear();
   }
 }

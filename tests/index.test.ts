@@ -43,6 +43,7 @@ function createMockDiscord() {
     deleteChannel: vi.fn(),
     sendApprovalRequest: vi.fn(),
     sendQuestionWithButtons: vi.fn(),
+    createWorkThread: vi.fn(),
     setTargetChannel: vi.fn(),
     sendMessage: vi.fn(),
     getRecentMessages: vi.fn().mockResolvedValue([]),
@@ -562,6 +563,181 @@ describe('AgentBridge', () => {
       }));
       expect(appServer.sendMessage).toHaveBeenNthCalledWith(2, expect.objectContaining({
         projectName: 'repo',
+        sessionKey: 'repo:thread-channel',
+        channelId: 'thread-channel',
+      }));
+    });
+
+    it('offers a work thread for long Codex requests and routes the run to the created thread', async () => {
+      const mockTmux = createMockTmux();
+      const appServer = {
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+        stop: vi.fn(),
+      };
+      const codexAdapter = {
+        config: { name: 'codex', displayName: 'Codex', command: 'codex', channelSuffix: 'codex' },
+        getStartCommand: vi.fn().mockReturnValue('cd "/test" && codex'),
+        matchesChannel: vi.fn(),
+        isInstalled: vi.fn().mockReturnValue(true),
+      };
+      const registry = {
+        get: vi.fn().mockReturnValue(codexAdapter),
+        getAll: vi.fn().mockReturnValue([codexAdapter]),
+        register: vi.fn(),
+        getByChannelSuffix: vi.fn(),
+        parseChannelName: vi.fn(),
+      } as any;
+      const project: ProjectState = {
+        projectName: 'repo',
+        projectPath: '/repo',
+        tmuxSession: 'app-server:repo',
+        discordChannels: { codex: 'main-channel' },
+        agents: { codex: true },
+        createdAt: new Date(),
+        lastActive: new Date(),
+      };
+      mockStateManager.getProject.mockReturnValue(project);
+      mockDiscord.sendQuestionWithButtons.mockResolvedValue('작업 thread 만들기');
+      mockDiscord.createWorkThread.mockResolvedValue('thread-long-run');
+      bridge = new AgentBridge({
+        discord: mockDiscord,
+        tmux: mockTmux,
+        stateManager: mockStateManager,
+        registry,
+        config: { ...createMockConfig(), codexTransport: 'app-server' },
+        codexAppServer: appServer as any,
+      });
+
+      await bridge.start();
+      const callback = mockDiscord.onMessage.mock.calls[0][0];
+      await callback('codex', '전체 구조 리서치하고 개선 계획 세워줘', 'repo', 'main-channel', {
+        messageId: 'm-long',
+        attachments: [],
+      });
+
+      expect(mockDiscord.sendQuestionWithButtons).toHaveBeenCalledWith(
+        'main-channel',
+        [expect.objectContaining({
+          header: '긴 작업 분리',
+          options: [
+            expect.objectContaining({ label: '작업 thread 만들기' }),
+            expect.objectContaining({ label: '현재 채널에서 계속' }),
+          ],
+        })],
+        expect.any(Number)
+      );
+      expect(mockDiscord.createWorkThread).toHaveBeenCalledWith(
+        'main-channel',
+        expect.stringContaining('전체 구조 리서치')
+      );
+      expect(appServer.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+        projectName: 'repo',
+        sessionKey: 'repo:thread-long-run',
+        channelId: 'thread-long-run',
+        content: '전체 구조 리서치하고 개선 계획 세워줘',
+      }));
+    });
+
+    it('keeps a long Codex request in the current channel when the user chooses not to create a thread', async () => {
+      const mockTmux = createMockTmux();
+      const appServer = {
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+        stop: vi.fn(),
+      };
+      const codexAdapter = {
+        config: { name: 'codex', displayName: 'Codex', command: 'codex', channelSuffix: 'codex' },
+        getStartCommand: vi.fn().mockReturnValue('cd "/test" && codex'),
+        matchesChannel: vi.fn(),
+        isInstalled: vi.fn().mockReturnValue(true),
+      };
+      const registry = {
+        get: vi.fn().mockReturnValue(codexAdapter),
+        getAll: vi.fn().mockReturnValue([codexAdapter]),
+        register: vi.fn(),
+        getByChannelSuffix: vi.fn(),
+        parseChannelName: vi.fn(),
+      } as any;
+      mockStateManager.getProject.mockReturnValue({
+        projectName: 'repo',
+        projectPath: '/repo',
+        tmuxSession: 'app-server:repo',
+        discordChannels: { codex: 'main-channel' },
+        agents: { codex: true },
+        createdAt: new Date(),
+        lastActive: new Date(),
+      });
+      mockDiscord.sendQuestionWithButtons.mockResolvedValue('현재 채널에서 계속');
+      bridge = new AgentBridge({
+        discord: mockDiscord,
+        tmux: mockTmux,
+        stateManager: mockStateManager,
+        registry,
+        config: { ...createMockConfig(), codexTransport: 'app-server' },
+        codexAppServer: appServer as any,
+      });
+
+      await bridge.start();
+      const callback = mockDiscord.onMessage.mock.calls[0][0];
+      await callback('codex', '전체 구조 리서치하고 개선 계획 세워줘', 'repo', 'main-channel', {
+        messageId: 'm-long',
+        attachments: [],
+      });
+
+      expect(mockDiscord.createWorkThread).not.toHaveBeenCalled();
+      expect(appServer.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+        sessionKey: 'repo:main-channel',
+        channelId: 'main-channel',
+      }));
+    });
+
+    it('does not ask to create another work thread when a long Codex request is already inside a thread', async () => {
+      const mockTmux = createMockTmux();
+      const appServer = {
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+        stop: vi.fn(),
+      };
+      const codexAdapter = {
+        config: { name: 'codex', displayName: 'Codex', command: 'codex', channelSuffix: 'codex' },
+        getStartCommand: vi.fn().mockReturnValue('cd "/test" && codex'),
+        matchesChannel: vi.fn(),
+        isInstalled: vi.fn().mockReturnValue(true),
+      };
+      const registry = {
+        get: vi.fn().mockReturnValue(codexAdapter),
+        getAll: vi.fn().mockReturnValue([codexAdapter]),
+        register: vi.fn(),
+        getByChannelSuffix: vi.fn(),
+        parseChannelName: vi.fn(),
+      } as any;
+      mockStateManager.getProject.mockReturnValue({
+        projectName: 'repo',
+        projectPath: '/repo',
+        tmuxSession: 'app-server:repo',
+        discordChannels: { codex: 'main-channel' },
+        agents: { codex: true },
+        createdAt: new Date(),
+        lastActive: new Date(),
+      });
+      bridge = new AgentBridge({
+        discord: mockDiscord,
+        tmux: mockTmux,
+        stateManager: mockStateManager,
+        registry,
+        config: { ...createMockConfig(), codexTransport: 'app-server' },
+        codexAppServer: appServer as any,
+      });
+
+      await bridge.start();
+      const callback = mockDiscord.onMessage.mock.calls[0][0];
+      await callback('codex', '전체 구조 리서치하고 개선 계획 세워줘', 'repo', 'thread-channel', {
+        messageId: 'm-thread-long',
+        attachments: [],
+        isThread: true,
+      });
+
+      expect(mockDiscord.sendQuestionWithButtons).not.toHaveBeenCalled();
+      expect(mockDiscord.createWorkThread).not.toHaveBeenCalled();
+      expect(appServer.sendMessage).toHaveBeenCalledWith(expect.objectContaining({
         sessionKey: 'repo:thread-channel',
         channelId: 'thread-channel',
       }));

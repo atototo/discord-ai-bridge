@@ -193,6 +193,86 @@ describe('DiscordClient', () => {
       });
     });
 
+    it('infers codex session channels from project category and codex-prefixed channel name', async () => {
+      const client = new DiscordClient('test-token', undefined, ['allowed-user']);
+      const callback = vi.fn();
+      client.onMessage(callback);
+
+      const mockClient = getMockClient();
+      const messageCreateHandler = mockClient.on.mock.calls.find(
+        (call: any[]) => call[0] === 'messageCreate'
+      )?.[1];
+
+      await messageCreateHandler({
+        id: 'msg-codex-channel',
+        author: { bot: false, id: 'allowed-user' },
+        channel: {
+          id: 'ch-codex-ios',
+          name: 'codex-wedding-ios',
+          parent: { id: 'cat-wedding', name: 'wedding' },
+          isTextBased: () => true,
+          isThread: () => false,
+        },
+        channelId: 'ch-codex-ios',
+        content: 'iOS 세션에서 이어서 보자',
+        attachments: new Map(),
+      });
+
+      expect(callback).toHaveBeenCalledWith('codex', 'iOS 세션에서 이어서 보자', 'wedding', 'ch-codex-ios', {
+        messageId: 'msg-codex-channel',
+        attachments: [],
+      });
+      expect(client.getChannelMapping().get('ch-codex-ios')).toEqual({
+        projectName: 'wedding',
+        agentType: 'codex',
+      });
+    });
+
+    it('routes messages in a Discord thread under an inferred codex channel to that thread id', async () => {
+      const client = new DiscordClient('test-token', undefined, ['allowed-user']);
+      const callback = vi.fn();
+      client.onMessage(callback);
+
+      const mockClient = getMockClient();
+      const messageCreateHandler = mockClient.on.mock.calls.find(
+        (call: any[]) => call[0] === 'messageCreate'
+      )?.[1];
+
+      const parentChannel = {
+        id: 'ch-codex-ios',
+        name: 'codex-wedding-ios',
+        parent: { id: 'cat-wedding', name: 'wedding' },
+        isTextBased: () => true,
+        isThread: () => false,
+      };
+
+      await messageCreateHandler({
+        id: 'msg-thread',
+        author: { bot: false, id: 'allowed-user' },
+        channel: {
+          id: 'thread-recipe',
+          name: '레시피 등록 구조 확인',
+          parentId: parentChannel.id,
+          parent: parentChannel,
+          isTextBased: () => true,
+          isThread: () => true,
+        },
+        channelId: 'thread-recipe',
+        content: '이 작업 계속해',
+        attachments: new Map(),
+      });
+
+      expect(callback).toHaveBeenCalledWith('codex', '이 작업 계속해', 'wedding', 'thread-recipe', {
+        messageId: 'msg-thread',
+        attachments: [],
+        isThread: true,
+      });
+      expect(client.getChannelMapping().get('ch-codex-ios')).toEqual({
+        projectName: 'wedding',
+        agentType: 'codex',
+      });
+    });
+
     it('passes message attachments to the callback', async () => {
       const client = new DiscordClient('test-token', undefined, ['allowed-user']);
       const callback = vi.fn();
@@ -398,6 +478,7 @@ describe('DiscordClient', () => {
       expect(callback).toHaveBeenCalledWith('codex', '스레드에서 진행해줘', 'repo', 'thread-ch', {
         messageId: 'thread-msg-1',
         attachments: [],
+        isThread: true,
       });
     });
 
@@ -431,6 +512,65 @@ describe('DiscordClient', () => {
         agentType: 'codex',
         withContext: true,
       });
+      expect(messageCallback).not.toHaveBeenCalled();
+    });
+
+    it('handles text fallback sessions command without forwarding it as a normal message', async () => {
+      const client = new DiscordClient('test-token', undefined, ['allowed-user']);
+      const messageCallback = vi.fn();
+      client.onMessage(messageCallback);
+
+      const category = { id: 'cat-wedding', name: 'wedding' };
+      const sessionChannels = new Map([
+        ['ch-main', {
+          id: 'ch-main',
+          name: 'codex-wedding',
+          parentId: category.id,
+          parent: category,
+          isTextBased: () => true,
+          isThread: () => false,
+        }],
+        ['ch-ios', {
+          id: 'ch-ios',
+          name: 'codex-wedding-ios',
+          parentId: category.id,
+          parent: category,
+          isTextBased: () => true,
+          isThread: () => false,
+        }],
+        ['ch-other', {
+          id: 'ch-other',
+          name: 'general',
+          parentId: category.id,
+          parent: category,
+          isTextBased: () => true,
+          isThread: () => false,
+        }],
+      ]);
+      const guild = { channels: { cache: sessionChannels } };
+      for (const channel of sessionChannels.values()) {
+        channel.guild = guild;
+      }
+      const send = vi.fn().mockResolvedValue(undefined);
+
+      const mockClient = getMockClient();
+      const messageCreateHandler = mockClient.on.mock.calls.find(
+        (call: any[]) => call[0] === 'messageCreate'
+      )?.[1];
+
+      await messageCreateHandler({
+        id: 'msg-sessions',
+        author: { bot: false, id: 'allowed-user' },
+        channel: { ...sessionChannels.get('ch-ios'), send },
+        channelId: 'ch-ios',
+        content: '!sessions',
+        attachments: new Map(),
+      });
+
+      expect(send).toHaveBeenCalledWith(expect.stringContaining('Codex 세션 채널'));
+      expect(send).toHaveBeenCalledWith(expect.stringContaining('<#ch-main>'));
+      expect(send).toHaveBeenCalledWith(expect.stringContaining('<#ch-ios>'));
+      expect(send).not.toHaveBeenCalledWith(expect.stringContaining('general'));
       expect(messageCallback).not.toHaveBeenCalled();
     });
 
@@ -503,6 +643,10 @@ describe('DiscordClient', () => {
             }),
           ],
         }),
+        expect.objectContaining({
+          name: 'sessions',
+          description: expect.stringContaining('Codex 세션'),
+        }),
       ]);
 
       const interactionHandler = mockClient.on.mock.calls.find(
@@ -552,6 +696,52 @@ describe('DiscordClient', () => {
         projectName: 'repo',
         agentType: 'codex',
         withContext: false,
+      });
+    });
+
+    it('handles the sessions slash command', async () => {
+      const client = new DiscordClient('test-token', undefined, ['allowed-user']);
+      const category = { id: 'cat-wedding', name: 'wedding' };
+      const sessionChannels = new Map([
+        ['ch-main', {
+          id: 'ch-main',
+          name: 'codex-wedding',
+          parentId: category.id,
+          parent: category,
+          isTextBased: () => true,
+          isThread: () => false,
+        }],
+        ['ch-admin', {
+          id: 'ch-admin',
+          name: 'codex-wedding-admin',
+          parentId: category.id,
+          parent: category,
+          isTextBased: () => true,
+          isThread: () => false,
+        }],
+      ]);
+      const guild = { channels: { cache: sessionChannels } };
+      for (const channel of sessionChannels.values()) {
+        channel.guild = guild;
+      }
+      const reply = vi.fn().mockResolvedValue(undefined);
+
+      const mockClient = getMockClient();
+      const interactionHandler = mockClient.on.mock.calls.find(
+        (call: any[]) => call[0] === 'interactionCreate'
+      )?.[1];
+      await interactionHandler({
+        isChatInputCommand: () => true,
+        commandName: 'sessions',
+        channelId: 'ch-main',
+        channel: sessionChannels.get('ch-main'),
+        user: { id: 'allowed-user', bot: false },
+        reply,
+      });
+
+      expect(reply).toHaveBeenCalledWith({
+        content: expect.stringContaining('<#ch-admin>'),
+        ephemeral: false,
       });
     });
   });
@@ -696,6 +886,40 @@ describe('DiscordClient', () => {
 
       expect(mockClient.channels.fetch).toHaveBeenCalledWith('ch-123');
       expect(mockChannel.send).toHaveBeenCalledWith('test message');
+    });
+
+    it('creates a work thread in a text channel', async () => {
+      const client = new DiscordClient('test-token');
+      const mockChannel = {
+        isTextBased: () => true,
+        threads: {
+          create: vi.fn().mockResolvedValue({ id: 'thread-123' }),
+        },
+      };
+
+      const mockClient = getMockClient();
+      mockClient.channels.fetch.mockResolvedValue(mockChannel);
+
+      const result = await client.createWorkThread('ch-123', '전체 구조 리서치하고 개선 계획 세워줘');
+
+      expect(result).toBe('thread-123');
+      expect(mockChannel.threads.create).toHaveBeenCalledWith({
+        name: '전체 구조 리서치하고 개선 계획 세워줘',
+        autoArchiveDuration: 1440,
+        reason: 'Codex long-running work thread',
+      });
+    });
+
+    it('returns null when a channel cannot create work threads', async () => {
+      const client = new DiscordClient('test-token');
+      const mockChannel = {
+        isTextBased: () => true,
+      };
+
+      const mockClient = getMockClient();
+      mockClient.channels.fetch.mockResolvedValue(mockChannel);
+
+      await expect(client.createWorkThread('ch-123', '긴 작업')).resolves.toBeNull();
     });
 
     it('sendFilesToChannel sends content with file attachments', async () => {

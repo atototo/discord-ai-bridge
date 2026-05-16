@@ -21,6 +21,10 @@
 -->
 - [wiki/architecture.md](wiki/architecture.md): Discord bot + tmux + Codex CLI bridge 아키텍처와 MCP 관계
 
+## Goals
+
+- [../docs/goals/2026-05-16-discord-codex-session-ux.md](../docs/goals/2026-05-16-discord-codex-session-ux.md): Discord category/channel/thread를 Codex 프로젝트/session/run UX로 확장하는 단계별 목표
+
 ## 결정 기록
 
 <!-- decisions/ 기록을 만들 때 한 줄 추가:
@@ -39,3 +43,5 @@
 - [findings/2026-05-07-codex-app-channel-research.md](findings/2026-05-07-codex-app-channel-research.md): Codex 앱 channel/plugin 가능성 1차 조사
 - [findings/2026-05-07-official-codex-slack-integration.md](findings/2026-05-07-official-codex-slack-integration.md): 공식 Codex Slack integration은 local session이 아니라 cloud task 기반임
 - [findings/2026-05-07-codex-realtime-audio-probe.md](findings/2026-05-07-codex-realtime-audio-probe.md): Codex app-server realtime audio probe 결과와 API key auth 제약 확인
+- [findings/2026-05-09-bridge-background-process-heat-check.md](findings/2026-05-09-bridge-background-process-heat-check.md): bridge daemon은 실행 중이나 CPU 발열의 직접 원인은 아니며 `caffeinate`로 sleep을 막을 수 있음
+- [findings/2026-05-16-codex-app-server-stalled-turn.md](findings/2026-05-16-codex-app-server-stalled-turn.md): Codex app-server turn 완료 이벤트 누락 시 Discord typing만 장시간 유지되는 문제와 watchdog 대응

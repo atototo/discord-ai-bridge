@@ -38,6 +38,7 @@ export interface DiscordAttachment {
 export interface DiscordMessageMeta {
   messageId: string;
   attachments: DiscordAttachment[];
+  isThread?: boolean;
 }
 
 export interface DiscordRecentMessage {

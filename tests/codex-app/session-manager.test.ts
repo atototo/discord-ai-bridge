@@ -190,6 +190,37 @@ describe('CodexAppServerSessionManager', () => {
     }
   });
 
+  it('stops typing and reports a stalled app-server turn after the timeout', async () => {
+    vi.useFakeTimers();
+    const client = new FakeClient();
+    const discord = createDiscord();
+    const manager = new CodexAppServerSessionManager(client, { turnTimeoutMs: 1000 });
+
+    try {
+      await manager.sendMessage({
+        projectName: 'repo',
+        projectPath: '/repo',
+        channelId: 'channel-1',
+        content: '오래 걸리는 작업',
+        attachments: [],
+        discord,
+      });
+
+      await vi.advanceTimersByTimeAsync(1000);
+
+      expect(discord.sendToChannel).toHaveBeenCalledWith(
+        'channel-1',
+        expect.stringContaining('Codex 응답이 제한 시간')
+      );
+
+      await vi.advanceTimersByTimeAsync(8000);
+      expect(discord.sendTyping).toHaveBeenCalledTimes(1);
+    } finally {
+      manager.stop();
+      vi.useRealTimers();
+    }
+  });
+
   it('starts a new thread for a project after resetThread', async () => {
     const client = new FakeClient();
     const manager = new CodexAppServerSessionManager(client);

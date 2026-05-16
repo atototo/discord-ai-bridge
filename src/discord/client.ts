@@ -54,6 +54,11 @@ const NEW_SESSION_COMMAND = {
   ],
 };
 
+const SESSIONS_COMMAND = {
+  name: 'sessions',
+  description: '현재 프로젝트 category의 Codex 세션 채널 목록을 봅니다',
+};
+
 const DISCORD_MAX_ATTACHMENTS_PER_MESSAGE = 10;
 
 export class DiscordClient {
@@ -106,6 +111,7 @@ export class DiscordClient {
       if (channelInfo && this.messageCallback) {
         if (!this.isUserAllowed(message.author.id)) return;
         if (await this.becomesThreadStarterMessage(message)) return;
+        if (await this.handleTextSessionsCommand(message, channelInfo)) return;
         if (await this.handleTextNewSessionCommand(message, channelInfo)) return;
         await this.messageCallback(
           channelInfo.agentType,
@@ -115,6 +121,9 @@ export class DiscordClient {
           {
             messageId: message.id,
             attachments: this.extractAttachments(message.attachments),
+            ...(typeof message.channel?.isThread === 'function' && message.channel.isThread()
+              ? { isThread: true }
+              : {}),
           }
         );
       }
@@ -128,14 +137,14 @@ export class DiscordClient {
   private async registerSlashCommands(): Promise<void> {
     const registrations = [...this.client.guilds.cache.values()].map(async (guild: any) => {
       if (!guild?.commands?.set) return;
-      await guild.commands.set([NEW_SESSION_COMMAND]);
+      await guild.commands.set([NEW_SESSION_COMMAND, SESSIONS_COMMAND]);
     });
     await Promise.all(registrations);
   }
 
   private async handleInteraction(interaction: any): Promise<void> {
     if (!interaction?.isChatInputCommand?.()) return;
-    if (interaction.commandName !== NEW_SESSION_COMMAND.name) return;
+    if (![NEW_SESSION_COMMAND.name, SESSIONS_COMMAND.name].includes(interaction.commandName)) return;
     if (!this.isUserAllowed(interaction.user?.id)) {
       await interaction.reply?.({ content: '⚠️ 이 명령을 사용할 권한이 없습니다.', ephemeral: true });
       return;
@@ -144,6 +153,14 @@ export class DiscordClient {
     const channelInfo = this.resolveChannelInfo(interaction.channelId, interaction.channel);
     if (!channelInfo) {
       await interaction.reply?.({ content: '⚠️ 이 채널은 bridge 프로젝트 채널로 등록되어 있지 않습니다.', ephemeral: true });
+      return;
+    }
+
+    if (interaction.commandName === SESSIONS_COMMAND.name) {
+      await interaction.reply?.({
+        content: this.sessionsMessage(channelInfo, interaction.channel),
+        ephemeral: false,
+      });
       return;
     }
 
@@ -163,6 +180,14 @@ export class DiscordClient {
       content: this.newSessionMessage(withContext),
       ephemeral: false,
     });
+  }
+
+  private async handleTextSessionsCommand(message: any, channelInfo: ChannelInfo): Promise<boolean> {
+    const match = message.content.trim().match(/^!sessions$/i);
+    if (!match) return false;
+
+    await message.channel.send?.(this.sessionsMessage(channelInfo, message.channel));
+    return true;
   }
 
   private async handleTextNewSessionCommand(message: any, channelInfo: ChannelInfo): Promise<boolean> {
@@ -191,18 +216,108 @@ export class DiscordClient {
       : '✅ 새 Codex 세션으로 전환했습니다. 다음 메시지는 이전 맥락 없이 시작합니다.';
   }
 
+  private sessionsMessage(channelInfo: ChannelInfo, channel?: any): string {
+    const sessions = this.findSessionChannels(channelInfo, channel);
+    const currentChannelId = this.currentChannelId(channel);
+    const title = `📚 **Codex 세션 채널** · ${channelInfo.projectName}`;
+
+    if (sessions.length === 0) {
+      return [
+        title,
+        '',
+        '이 project category에서 Codex 세션 채널을 찾지 못했습니다.',
+        `새 세션은 이 category 아래에 \`codex-${channelInfo.projectName}-작업명\` 형식의 채널을 만들면 됩니다.`,
+      ].join('\n');
+    }
+
+    const lines = sessions.map((session) => {
+      const marker = session.id === currentChannelId ? ' ← 현재' : '';
+      return `- <#${session.id}> \`${session.name}\`${marker}`;
+    });
+
+    return [
+      title,
+      '',
+      ...lines,
+      '',
+      `새 세션은 이 category 아래에 \`codex-${channelInfo.projectName}-작업명\` 채널을 만들면 됩니다.`,
+    ].join('\n');
+  }
+
+  private findSessionChannels(channelInfo: ChannelInfo, channel?: any): Array<{ id: string; name: string }> {
+    const categoryId = this.categoryId(channel);
+    const guildChannels = this.guildChannels(channel);
+    if (!categoryId || !guildChannels) return [];
+
+    const sessions: Array<{ id: string; name: string }> = [];
+    for (const candidate of guildChannels) {
+      if (!candidate?.id || !candidate?.name) continue;
+      if (typeof candidate.isThread === 'function' && candidate.isThread()) continue;
+      if (typeof candidate.isTextBased === 'function' && !candidate.isTextBased()) continue;
+      if (this.categoryId(candidate) !== categoryId) continue;
+
+      const inferred = this.inferChannelInfo(candidate);
+      if (inferred?.projectName !== channelInfo.projectName || inferred.agentType !== 'codex') continue;
+      sessions.push({ id: candidate.id, name: candidate.name });
+    }
+
+    return sessions.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  private currentChannelId(channel?: any): string | undefined {
+    if (!channel) return undefined;
+    if (typeof channel.isThread === 'function' && channel.isThread()) {
+      return channel.parentId || channel.parent?.id;
+    }
+    return channel.id;
+  }
+
+  private guildChannels(channel?: any): any[] | undefined {
+    const cache = channel?.guild?.channels?.cache || channel?.parent?.guild?.channels?.cache;
+    if (!cache) return undefined;
+    if (typeof cache.values === 'function') return [...cache.values()];
+    if (Array.isArray(cache)) return cache;
+    return undefined;
+  }
+
   private resolveChannelInfo(channelId: string, channel?: any): ChannelInfo | undefined {
     const direct = this.channelMapping.get(channelId);
     if (direct) return direct;
 
     const parentId = this.parentChannelId(channel);
-    return parentId ? this.channelMapping.get(parentId) : undefined;
+    const parent = parentId ? this.channelMapping.get(parentId) : undefined;
+    if (parent) return parent;
+
+    const inferred = this.inferChannelInfo(channel);
+    if (inferred) {
+      this.channelMapping.set(channelId, inferred);
+      console.log(`Inferred channel ${channel?.name || channelId} (${channelId}) -> ${inferred.projectName}:${inferred.agentType}`);
+      return inferred;
+    }
+
+    const parentChannel = this.threadParentChannel(channel);
+    if (parentChannel?.id) {
+      const inferredParent = this.inferChannelInfo(parentChannel);
+      if (inferredParent) {
+        this.channelMapping.set(parentChannel.id, inferredParent);
+        return inferredParent;
+      }
+    }
+
+    return undefined;
   }
 
   private parentChannelId(channel?: any): string | undefined {
     if (!channel) return undefined;
     if (typeof channel.isThread === 'function' && !channel.isThread()) return undefined;
     return channel.parentId || channel.parent?.id;
+  }
+
+  private threadParentChannel(channel?: any): any | undefined {
+    if (!channel || typeof channel.isThread !== 'function' || !channel.isThread()) {
+      return undefined;
+    }
+    return channel.parent;
   }
 
   private isParentThreadStarterMessage(message: any): boolean {
@@ -292,7 +407,7 @@ export class DiscordClient {
     this.client.guilds.cache.forEach((guild) => {
       guild.channels.cache.forEach((channel) => {
         if (channel.isTextBased() && channel.name) {
-          const parsed = this.parseChannelName(channel.name);
+          const parsed = this.inferChannelInfo(channel);
           if (parsed) {
             this.channelMapping.set(channel.id, parsed);
             console.log(`Mapped channel ${channel.name} (${channel.id}) -> ${parsed.projectName}:${parsed.agentType}`);
@@ -302,7 +417,45 @@ export class DiscordClient {
     });
   }
 
-  private parseChannelName(channelName: string): ChannelInfo | null {
+  private inferChannelInfo(channel?: any): ChannelInfo | undefined {
+    if (!channel?.name) return undefined;
+    const existing = this.parseChannelName(channel.name);
+    if (existing) return existing;
+
+    const categoryName = this.categoryName(channel);
+    if (!categoryName) return undefined;
+
+    for (const adapter of this.registry.getAll()) {
+      if (channel.name === adapter.config.channelSuffix ||
+        channel.name.startsWith(`${adapter.config.channelSuffix}-`)) {
+        return {
+          projectName: categoryName,
+          agentType: adapter.config.name,
+        };
+      }
+    }
+
+    return undefined;
+  }
+
+  private categoryName(channel?: any): string | undefined {
+    if (!channel) return undefined;
+    if (typeof channel.isThread === 'function' && channel.isThread()) {
+      return this.categoryName(channel.parent);
+    }
+    const parent = channel.parent;
+    return typeof parent?.name === 'string' ? parent.name : undefined;
+  }
+
+  private categoryId(channel?: any): string | undefined {
+    if (!channel) return undefined;
+    if (typeof channel.isThread === 'function' && channel.isThread()) {
+      return this.categoryId(channel.parent);
+    }
+    return channel.parentId || channel.parent?.id;
+  }
+
+  private parseChannelName(channelName: string): ChannelInfo | undefined {
     // Use agent registry to parse channel names dynamically
     const result = this.registry.parseChannelName(channelName);
     if (result) {
@@ -311,7 +464,7 @@ export class DiscordClient {
         agentType: result.agent.config.name,
       };
     }
-    return null;
+    return undefined;
   }
 
   async connect(): Promise<void> {
@@ -599,6 +752,31 @@ export class DiscordClient {
       }
       return false;
     }
+  }
+
+  async createWorkThread(channelId: string, name: string): Promise<string | null> {
+    try {
+      const channel = await this.client.channels.fetch(channelId);
+      if (!channel?.isTextBased() || typeof (channel as any).threads?.create !== 'function') {
+        console.warn(`Channel ${channelId} cannot create threads`);
+        return null;
+      }
+
+      const thread = await (channel as any).threads.create({
+        name: this.truncateThreadName(name),
+        autoArchiveDuration: 1440,
+        reason: 'Codex long-running work thread',
+      });
+      return thread?.id || null;
+    } catch (error) {
+      console.error(`Failed to create work thread in ${channelId}:`, error);
+      return null;
+    }
+  }
+
+  private truncateThreadName(name: string): string {
+    const normalized = name.replace(/\s+/g, ' ').trim() || 'Codex 작업';
+    return normalized.length > 90 ? normalized.slice(0, 89) + '…' : normalized;
   }
 
   /**

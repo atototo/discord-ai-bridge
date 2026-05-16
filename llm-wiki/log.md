@@ -299,3 +299,45 @@
 - 첫 batch에는 원래 완료 본문을 붙이고, 이후 batch에는 `첨부 파일 11-16` 같은 범위 안내 문구를 붙인다.
 - 검증: `npm test -- tests/discord/client.test.ts`, `npm run typecheck`, `npm test`(17 files, 196 tests), `npm run build` 통과.
 - sandbox 권한상 `/Users/winter.e/.discord-agent-bridge/daemon.log`를 열어 daemon을 재시작하는 작업은 실패했으므로, 새 dist 적용은 사용자가 로컬에서 daemon 종료 후 재시작해야 한다.
+
+## [2026-05-09] ops | background process 발열 원인 확인
+
+- `/Users/winter.e/Documents/ai-bridge`를 cwd로 잡은 `tmux`, `node`, bridge daemon 프로세스가 실행 중임을 확인했다.
+- 실제 bridge 관련 PID(`daemon-entry.js`, `caffeinate`, bridge child `codex app-server`)는 CPU 0.0-0.1% 수준이라 발열의 직접 원인으로 보기 어렵다.
+- 같은 시점 CPU 상위 프로세스는 `EndpointProtectorClient`, Codex desktop app/app-server/renderer, `WindowServer`, Chrome renderer였다.
+- macOS bridge daemon은 `caffeinate -ims`를 동반하므로, CPU를 많이 쓰지 않아도 Mac sleep을 막을 수 있다는 운영 finding을 추가했다.
+
+## [2026-05-16] fix | Codex app-server stalled turn watchdog
+
+- cocifee Discord 채널에서 메시지는 daemon에 수신됐지만 Codex app-server `turn/completed` 이벤트가 오지 않아 답변 없이 typing indicator만 유지되는 증상을 확인했다.
+- `CodexAppServerSessionManager`에 기본 30분 `turnTimeoutMs` watchdog을 추가해 timeout 시 typing timer를 정리하고 Discord에 새 세션 안내를 보내도록 했다.
+- cocifee 프로젝트 경로에서 `agent-discord-codex`를 재실행해 기존 hung app-server 세션을 끊고 새 dist로 daemon을 재시작했다.
+- 검증: bundled Node 24 기준 `npm test -- tests/codex-app/session-manager.test.ts`, `npm run typecheck`, `npm test`(17 files, 197 tests), `npm run build` 통과.
+
+## [2026-05-16] goal | Discord Codex session UX 단계화
+
+- Codex native `/goal` 기능은 app-server에서 `goals feature is disabled`로 사용할 수 없어 repo-local goal 문서로 대체하기로 했다.
+- `docs/goals/2026-05-16-discord-codex-session-ux.md`를 추가해 `Discord Category = 프로젝트`, `Discord Channel = Codex 세션`, `Discord Thread = 긴 작업/run` 모델을 목표로 정리했다.
+- 우선순위는 채널 기반 세션화, 메인 채널 허브 UX, 긴 작업 thread 분기, run 상태/heartbeat, Codex 앱 역방향 연동 순서다.
+
+## [2026-05-16] feature | Discord category 기반 codex 세션 채널 lazy routing
+
+- Discord client가 기존 `project-codex` channel name 외에 project category 아래의 `codex-*` 채널을 Codex session channel로 인식하도록 했다.
+- 예를 들어 `wedding` category 아래 `#codex-wedding-ios`에 사용자가 메시지를 보내면 `projectName=wedding`, `agentType=codex`, `channelId=<해당 채널>`로 bridge callback이 호출되고, 기존 `projectName:channelId` session key로 독립 Codex app-server thread가 생긴다.
+- Discord thread 안 메시지는 parent가 lazy 인식된 `codex-*` 채널이면 기존처럼 thread channel ID를 session key로 사용하되 같은 project path를 공유한다.
+- 검증: bundled Node 24 기준 `npm test -- tests/discord/client.test.ts`, `npm run typecheck`, `npm test`(17 files, 199 tests), `npm run build` 통과.
+
+## [2026-05-16] feature | Discord sessions command
+
+- `/sessions` slash command와 `!sessions` 텍스트 fallback을 추가했다.
+- 현재 Discord channel 또는 thread의 project category를 기준으로 `codex-*`/`<project>-codex` 세션 채널 목록을 표시한다.
+- 세션 목록에는 channel mention, channel name, 현재 channel 표시를 포함한다.
+- 검증: bundled Node 24 기준 `npm test -- tests/discord/client.test.ts`, `npm run typecheck`, `npm test`(17 files, 201 tests), `npm run build` 통과.
+
+## [2026-05-16] feature | 긴 Codex 작업 Discord thread 분기
+
+- main Codex channel에서 긴 작업으로 보이는 요청을 받으면 버튼 질문으로 `작업 thread 만들기` 또는 `현재 채널에서 계속`을 선택하게 했다.
+- `작업 thread 만들기`를 선택하면 Discord thread를 생성하고, 해당 thread channel ID를 Codex app-server `sessionKey`에 사용해 긴 작업을 main channel과 분리한다.
+- 이미 Discord thread 안에서 들어온 긴 요청은 추가 thread 생성 질문 없이 그 thread session으로 바로 라우팅한다.
+- Discord client callback meta에 `isThread`를 추가했고, `createWorkThread()` channel operation을 추가했다.
+- 검증: bundled Node 24 기준 `npm test -- tests/index.test.ts tests/discord/client.test.ts`, `npm run typecheck`, `npm test`(17 files, 206 tests), `npm run build` 통과.

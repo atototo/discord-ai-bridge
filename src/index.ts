@@ -153,11 +153,17 @@ export class AgentBridge {
         const recentMessages = await this.shouldLoadRecentDiscordContext(sessionKey)
           ? await this.loadRecentDiscordContext(channelId, meta.messageId)
           : [];
+        const targetChannelId = await this.maybeRouteLongCodexWorkToThread(
+          sanitized,
+          channelId,
+          !!meta.isThread
+        );
+        const targetSessionKey = this.codexSessionKey(projectName, targetChannelId);
         await this.codexAppServer.sendMessage({
           projectName,
-          sessionKey,
+          sessionKey: targetSessionKey,
           projectPath: project.projectPath,
-          channelId,
+          channelId: targetChannelId,
           content,
           attachments: downloadedAttachments,
           yolo: project.yolo || this.bridgeConfig.codexYolo,
@@ -215,6 +221,55 @@ export class AgentBridge {
 
   private codexSessionKey(projectName: string, channelId: string): string {
     return `${projectName}:${channelId}`;
+  }
+
+  private async maybeRouteLongCodexWorkToThread(
+    content: string,
+    channelId: string,
+    isThread: boolean
+  ): Promise<string> {
+    if (isThread || !this.looksLikeLongCodexWork(content)) return channelId;
+
+    const selected = await this.discord.sendQuestionWithButtons?.(
+      channelId,
+      [{
+        header: '긴 작업 분리',
+        question: '이 요청은 오래 걸릴 수 있습니다. 현재 채널에서 계속할까요, 아니면 작업 thread를 만들어서 진행할까요?',
+        options: [
+          { label: '작업 thread 만들기', description: '진행/승인/최종 답변을 새 thread에 모읍니다.' },
+          { label: '현재 채널에서 계속', description: '새 thread 없이 현재 채널 세션에서 진행합니다.' },
+        ],
+      }],
+      120000
+    );
+
+    if (selected !== '작업 thread 만들기') return channelId;
+
+    const threadId = await this.discord.createWorkThread?.(
+      channelId,
+      this.workThreadName(content)
+    );
+    if (!threadId) {
+      await this.discord.sendToChannel(channelId, '⚠️ 작업 thread를 만들지 못해 현재 채널에서 계속 진행합니다.');
+      return channelId;
+    }
+
+    await this.discord.sendToChannel(threadId, '🧵 이 thread에서 Codex 작업을 진행합니다.');
+    return threadId;
+  }
+
+  private looksLikeLongCodexWork(content: string): boolean {
+    const normalized = content.trim();
+    if (normalized.startsWith('!')) return false;
+    return /(구현|수정|고쳐|테스트|빌드|리서치|조사|전체|구조|개선 계획|진행해|작업해|확인해봐|점검)/i.test(normalized);
+  }
+
+  private workThreadName(content: string): string {
+    const firstLine = content
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/[`*_~>#]/g, '');
+    return firstLine.length > 40 ? firstLine.slice(0, 39) + '…' : firstLine || 'Codex 작업';
   }
 
   private async loadRecentDiscordContext(channelId: string, beforeMessageId: string) {

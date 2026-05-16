@@ -1,6 +1,6 @@
 # 현재 상태
 
-날짜: 2026-05-08
+날짜: 2026-05-16
 
 ## 작업공간
 
@@ -65,19 +65,21 @@
 
 ## 현재 목표
 
-- `DoBuDevel/discord-agent-bridge`는 MIT license로 확인했고, `src/agents/`에 adapter를 추가하는 구조다.
-- 기존 Claude/OpenCode 흐름은 유지하면서 Codex adapter를 추가하는 MVP를 구현했다.
-- Discord allowlist와 tmux target escaping을 1차 반영했다.
-- 다음 세부 목표는 GitHub push 후 필요 시 실제 다른 프로젝트에서 Codex app-server transport, 이미지/파일 양방향 첨부, 승인 요청 왕복, `/new-session` slash command 표시/동작, Discord thread 안 응답 라우팅, noisy command progress suppression, 다중 이미지 batch 첨부를 반복 smoke test하고 음성 첨부 UX를 나중에 결정하는 것이다.
+- Discord를 Codex 앱처럼 프로젝트별 세션을 눈으로 보고 선택할 수 있는 클라이언트로 발전시키는 것이 다음 큰 목표다.
+- 새 goal 문서 `docs/goals/2026-05-16-discord-codex-session-ux.md`를 기준으로 단계적으로 진행한다.
+- 우선순위는 `Discord Category = 프로젝트`, `Discord Channel = Codex 세션`, `Discord Thread = 긴 작업/run` 모델이다.
+- Phase 1은 프로젝트 category 안의 `codex-*` 채널을 독립 Codex app-server session으로 자동/lazy 연결하는 것이다.
+- Phase 1의 첫 구현으로 Discord client가 project category 아래의 `codex-*` 채널을 `projectName=categoryName`, `agentType=codex`로 lazy 인식하도록 했다. 예: `wedding` category의 `#codex-wedding-ios`는 `wedding:codex` channel session으로 라우팅된다.
+- Phase 2의 첫 구현으로 `/sessions` slash command와 `!sessions` fallback을 추가했다. 현재 project category 안의 Codex 세션 채널 목록을 보여주고, 현재 channel을 표시한다.
+- Phase 3의 첫 구현으로 긴 Codex 요청을 main channel에서 감지하면 Discord 버튼으로 `작업 thread 만들기` 또는 `현재 채널에서 계속`을 선택하게 한다. thread 생성을 선택하면 Discord thread를 만들고 그 thread channel ID를 Codex app-server session key로 사용한다.
+- 이미 Discord thread 안에서 온 요청은 다시 thread 생성을 묻지 않고 해당 thread session으로 바로 라우팅한다.
 
 ## 다음 작업
 
-1. 현재 변경사항을 커밋하고 `origin/main`에 push한다.
-2. daemon 재시작 후 Discord slash UI에서 `/new-session`과 `with-context` 옵션 설명이 보이는지, 이미지 10개 초과 첨부가 여러 메시지로 나뉘어 올라오는지 실제 서버에서 확인한다.
-3. Discord thread 안에서 메시지를 보내면 봇 응답과 승인 요청이 thread 안으로 들어가고, parent 채널과 Codex 세션이 분리되는지 smoke test한다.
-4. 다른 로컬 프로젝트 경로에서 `agent-discord-codex`로 새 channel/category 생성 또는 재사용 흐름을 다시 확인한다.
-5. 필요하면 `agent-discord-codex --yolo`로 실제 Discord smoke test를 실행해 승인 카드 없이 명령/파일 작업이 진행되는지 확인한다.
-6. Discord voice message를 API key auth 기반 realtime audio로 처리할지, 아니면 로컬 도구 승인 기반 파일 처리 UX로 유지할지 나중에 결정한다.
+1. daemon 재시작 후 실제 Discord main channel에서 긴 요청을 보내 `작업 thread 만들기` 버튼 선택 시 새 thread가 생성되고 그 안에서 Codex 답변/승인/최종 결과가 이어지는지 smoke test한다.
+2. 같은 긴 요청에서 `현재 채널에서 계속` 선택 시 새 thread 없이 main channel session으로 진행되는지 확인한다.
+3. Phase 4로 run heartbeat/status UX를 설계/구현한다. 긴 작업 중 Discord 채팅 상에서 마지막 이벤트 시간, 현재 실행 중인 turn, timeout 안내를 볼 수 있어야 한다.
+4. 필요하면 lazy 인식한 channel mapping을 state에 영구 저장할지 결정한다.
 
 ## 열린 질문 / 블로커
 
@@ -85,3 +87,4 @@
 - 현재 기본 shell Node는 16이라 테스트 시 bundled Node 24 경로를 PATH 앞에 둬야 한다.
 - Codex app-server WebSocket transport는 공식 문서상 experimental/unsupported라 현재 구현은 stdio JSON-RPC만 사용한다.
 - daemon이 이미 실행 중이면 `CODEX_TRANSPORT=app-server` 환경변수가 기존 daemon에 적용되지 않는다. app-server mode 테스트 전 daemon을 중지하고 같은 환경변수로 다시 시작해야 한다.
+- 새 `codex-*` 채널 lazy routing은 아직 state에 영구 저장하지 않는다. daemon 재시작 후에도 Discord client의 startup scan 또는 첫 메시지 inference로 다시 인식하는 모델이다.
