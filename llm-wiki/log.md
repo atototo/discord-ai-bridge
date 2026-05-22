@@ -359,3 +359,10 @@
 - `TurnState.statusMessagePromise`를 추가해 같은 turn의 pending status 생성을 공유하고, 진행 이벤트는 새 메시지를 만들지 않고 기존 생성 완료를 기다린 뒤 같은 message를 edit하도록 수정했다.
 - `agentMessage` 시작 단계 문구는 내부 이벤트명 대신 `답변 작성 중`으로 표시한다.
 - 검증: bundled Node 24 기준 `npm test -- tests/codex-app/session-manager.test.ts -t "duplicate status|answer writing"`, `npm test -- tests/codex-app/session-manager.test.ts tests/discord/client.test.ts`(62 tests), `npm run typecheck`, `npm test`(17 files, 214 tests), `npm run build` 통과.
+
+## [2026-05-22] fix | 미등록 category의 codex-* lazy routing 오탐 방지
+
+- 다른 컴퓨터에서 꼬집사 봇이 쓰는 `가계부/#codex-꼬집사-가계부` 채널에 코뎅이 bridge도 반응하는 문제가 확인됐다.
+- 원인은 Phase 1 lazy routing이 category 아래의 모든 `codex-*` 채널을 Codex 세션으로 추론하면서, 해당 category가 bridge state에 등록된 project인지 확인하지 않았기 때문이다.
+- `DiscordClient`가 `registerChannelMappings()`로 state에서 들어온 projectName을 `knownProjectNames`로 보관하고, category 기반 `codex-*` inference는 이 known project category에서만 허용하도록 수정했다.
+- 이 변경 후 미등록 category의 `codex-*` 채널은 callback으로 전달되지 않으므로 `Project "<category>" not found in state` 메시지도 보내지 않는다.

@@ -1,6 +1,6 @@
 # 현재 상태
 
-날짜: 2026-05-16
+날짜: 2026-05-22
 
 ## 작업공간
 
@@ -75,13 +75,15 @@
 - 이미 Discord thread 안에서 온 요청은 다시 thread 생성을 묻지 않고 해당 thread session으로 바로 라우팅한다.
 - Phase 4의 첫 구현으로 Codex app-server turn마다 Discord run status message를 하나 생성하고, `starting`, `running`, `waiting_approval`, `stalled`, `completed` 상태를 같은 메시지 edit으로 갱신한다. 진행 중에는 `마지막 활동: N초/N분 전` heartbeat를 1분마다 갱신하고, typing indicator는 보조 신호로 유지한다.
 - Phase 4 smoke test에서 status message가 두 개처럼 보이는 race condition을 확인해 수정했다. 첫 status 생성이 pending인 동안 진행 이벤트가 들어와도 같은 `statusMessagePromise`를 공유하므로 새 status message를 만들지 않고 기존 message를 edit한다. `agentMessage` 진행 문구는 `답변 작성 중`으로 표시한다.
+- 다른 컴퓨터의 `가계부/#codex-꼬집사-가계부`처럼 다른 봇이 쓰는 `codex-*` 채널까지 코뎅이 bridge가 lazy 인식하는 문제가 확인됐다. category 기반 `codex-*` 추론은 이제 state에서 등록된 project category에만 허용한다.
 
 ## 다음 작업
 
 1. daemon 재시작 후 실제 Discord thread에서 새 status 중복 방지 수정이 반영되어 한 turn당 status message가 하나만 유지되는지 smoke test한다.
-2. 승인 요청이 필요한 작업에서 status가 `waiting_approval`로 바뀌고 승인 후 `running`으로 복귀하는지 확인한다.
-3. Phase 4 후속으로 status message 문구/단계 라벨을 실제 사용 로그를 보며 더 다듬을지 결정한다.
-4. 필요하면 lazy 인식한 channel mapping을 state에 영구 저장할지 결정한다.
+2. 다른 봇이 쓰는 미등록 category의 `codex-*` 채널에서는 코뎅이 bridge가 반응하지 않는지 배포 환경에서 smoke test한다.
+3. 승인 요청이 필요한 작업에서 status가 `waiting_approval`로 바뀌고 승인 후 `running`으로 복귀하는지 확인한다.
+4. Phase 4 후속으로 status message 문구/단계 라벨을 실제 사용 로그를 보며 더 다듬을지 결정한다.
+5. 필요하면 lazy 인식한 channel mapping을 state에 영구 저장할지 결정한다.
 
 ## 열린 질문 / 블로커
 
@@ -89,4 +91,4 @@
 - 현재 기본 shell Node는 16이라 테스트 시 bundled Node 24 경로를 PATH 앞에 둬야 한다.
 - Codex app-server WebSocket transport는 공식 문서상 experimental/unsupported라 현재 구현은 stdio JSON-RPC만 사용한다.
 - daemon이 이미 실행 중이면 `CODEX_TRANSPORT=app-server` 환경변수가 기존 daemon에 적용되지 않는다. app-server mode 테스트 전 daemon을 중지하고 같은 환경변수로 다시 시작해야 한다.
-- 새 `codex-*` 채널 lazy routing은 아직 state에 영구 저장하지 않는다. daemon 재시작 후에도 Discord client의 startup scan 또는 첫 메시지 inference로 다시 인식하는 모델이다.
+- 새 `codex-*` 채널 lazy routing은 아직 state에 영구 저장하지 않는다. 단, 오탐 방지를 위해 state에 등록된 project category 안에서만 첫 메시지 inference로 인식한다.

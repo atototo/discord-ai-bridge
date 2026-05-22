@@ -53,6 +53,7 @@ Discord channel 하나를 Codex app-server thread 하나에 대응시킨다.
 ### 요구사항
 
 - 사용자가 프로젝트 category 안에서 `codex-*` 채널을 만들면 bridge가 Codex session 후보로 인식한다.
+- `codex-*` lazy 인식은 bridge state에 이미 등록된 프로젝트 category 안에서만 동작한다. 다른 봇이 쓰는 category/channel까지 이름만 보고 가져가면 안 된다.
 - 첫 메시지가 들어올 때 해당 Discord channel ID를 기준으로 독립 Codex app-server thread를 만든다.
 - 기존 메인 채널 `#codex-<project>`도 같은 방식의 기본 세션으로 유지한다.
 - 같은 category 안에서 만든 `codex-*` 채널은 같은 프로젝트 경로를 공유한다.
@@ -62,6 +63,7 @@ Discord channel 하나를 Codex app-server thread 하나에 대응시킨다.
 ### 수용 기준
 
 - `#codex-wedding-ios` 같은 새 채널에 첫 메시지를 보내면 `wedding` 프로젝트 경로의 새 Codex session으로 라우팅된다.
+- state에 `wedding` 프로젝트가 없으면 `wedding/#codex-wedding-ios`도 자동 라우팅하지 않는다.
 - `#codex-wedding`과 `#codex-wedding-ios`는 서로 다른 Codex app-server thread를 사용한다.
 - 새 채널 연동은 명시적 setup 명령 없이 동작하거나, 실패 시 사용자가 해야 할 일을 Discord에 알려준다.
 - 기존 등록 채널과 `/new-session` 동작은 깨지지 않는다.

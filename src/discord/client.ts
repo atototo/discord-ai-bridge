@@ -69,6 +69,7 @@ export class DiscordClient {
   private messageCallback?: MessageCallback;
   private newSessionCallback?: NewSessionCallback;
   private channelMapping: Map<string, ChannelInfo> = new Map();
+  private knownProjectNames: Set<string> = new Set();
   private registry: AgentRegistry;
 
   constructor(token: string, registry?: AgentRegistry, allowedUserIds: string[] = []) {
@@ -424,6 +425,7 @@ export class DiscordClient {
 
     const categoryName = this.categoryName(channel);
     if (!categoryName) return undefined;
+    if (!this.knownProjectNames.has(categoryName)) return undefined;
 
     for (const adapter of this.registry.getAll()) {
       if (channel.name === adapter.config.channelSuffix ||
@@ -706,6 +708,7 @@ export class DiscordClient {
    */
   registerChannelMappings(mappings: { channelId: string; projectName: string; agentType: string }[]): void {
     for (const m of mappings) {
+      this.knownProjectNames.add(m.projectName);
       this.channelMapping.set(m.channelId, {
         projectName: m.projectName,
         agentType: m.agentType,

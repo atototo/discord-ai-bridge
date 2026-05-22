@@ -197,6 +197,9 @@ describe('DiscordClient', () => {
       const client = new DiscordClient('test-token', undefined, ['allowed-user']);
       const callback = vi.fn();
       client.onMessage(callback);
+      client.registerChannelMappings([
+        { channelId: 'known-wedding-channel', projectName: 'wedding', agentType: 'codex' },
+      ]);
 
       const mockClient = getMockClient();
       const messageCreateHandler = mockClient.on.mock.calls.find(
@@ -228,10 +231,42 @@ describe('DiscordClient', () => {
       });
     });
 
+    it('does not infer codex-prefixed channels for categories that are not registered projects', async () => {
+      const client = new DiscordClient('test-token', undefined, ['allowed-user']);
+      const callback = vi.fn();
+      client.onMessage(callback);
+
+      const mockClient = getMockClient();
+      const messageCreateHandler = mockClient.on.mock.calls.find(
+        (call: any[]) => call[0] === 'messageCreate'
+      )?.[1];
+
+      await messageCreateHandler({
+        id: 'msg-unknown-codex-channel',
+        author: { bot: false, id: 'allowed-user' },
+        channel: {
+          id: 'ch-household',
+          name: 'codex-꼬집사-가계부',
+          parent: { id: 'cat-household', name: '가계부' },
+          isTextBased: () => true,
+          isThread: () => false,
+        },
+        channelId: 'ch-household',
+        content: '안녕?',
+        attachments: new Map(),
+      });
+
+      expect(callback).not.toHaveBeenCalled();
+      expect(client.getChannelMapping().has('ch-household')).toBe(false);
+    });
+
     it('routes messages in a Discord thread under an inferred codex channel to that thread id', async () => {
       const client = new DiscordClient('test-token', undefined, ['allowed-user']);
       const callback = vi.fn();
       client.onMessage(callback);
+      client.registerChannelMappings([
+        { channelId: 'known-wedding-channel', projectName: 'wedding', agentType: 'codex' },
+      ]);
 
       const mockClient = getMockClient();
       const messageCreateHandler = mockClient.on.mock.calls.find(
@@ -519,6 +554,9 @@ describe('DiscordClient', () => {
       const client = new DiscordClient('test-token', undefined, ['allowed-user']);
       const messageCallback = vi.fn();
       client.onMessage(messageCallback);
+      client.registerChannelMappings([
+        { channelId: 'known-wedding-channel', projectName: 'wedding', agentType: 'codex' },
+      ]);
 
       const category = { id: 'cat-wedding', name: 'wedding' };
       const sessionChannels = new Map([
@@ -701,6 +739,9 @@ describe('DiscordClient', () => {
 
     it('handles the sessions slash command', async () => {
       const client = new DiscordClient('test-token', undefined, ['allowed-user']);
+      client.registerChannelMappings([
+        { channelId: 'known-wedding-channel', projectName: 'wedding', agentType: 'codex' },
+      ]);
       const category = { id: 'cat-wedding', name: 'wedding' };
       const sessionChannels = new Map([
         ['ch-main', {
